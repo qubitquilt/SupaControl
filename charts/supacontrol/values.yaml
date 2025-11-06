@@ -1,0 +1,94 @@
+# Default values for supacontrol
+
+replicaCount: 1
+
+image:
+  repository: supacontrol/server
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: supacontrol.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: supacontrol-tls
+      hosts:
+        - supacontrol.example.com
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Application Configuration
+config:
+  jwtSecret: ""  # REQUIRED: Set this to a secure random string
+
+  database:
+    host: "supacontrol-postgresql"
+    port: "5432"
+    user: "supacontrol"
+    password: ""  # REQUIRED: Set database password
+    name: "supacontrol"
+
+  kubernetes:
+    ingressClass: "nginx"
+    ingressDomain: "supabase.example.com"
+
+  supabase:
+    chartRepo: "https://supabase-community.github.io/supabase-kubernetes"
+    chartName: "supabase"
+    chartVersion: ""
+
+# PostgreSQL subchart configuration
+postgresql:
+  enabled: true
+  auth:
+    username: supacontrol
+    password: ""  # REQUIRED: Set database password
+    database: supacontrol
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi

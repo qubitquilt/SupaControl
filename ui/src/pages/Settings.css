@@ -1,0 +1,84 @@
+.settings {
+  min-height: 100vh;
+  background-color: var(--bg-light);
+}
+
+.settings-header {
+  background-color: white;
+  padding: 24px 40px;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settings-header h1 {
+  font-size: 28px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.settings-header p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.settings-main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.settings-section {
+  background-color: white;
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.section-header h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.section-header p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.api-keys-table tbody tr:hover {
+  background-color: var(--bg-light);
+}
+
+.key-display {
+  background-color: var(--bg-light);
+  padding: 16px;
+  border-radius: 4px;
+  margin: 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.key-display code {
+  flex: 1;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--text-primary);
+}
+
+.settings .empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
