@@ -1,5 +1,10 @@
 # SupaControl
 
+[![CI](https://github.com/qubitquilt/SupaControl/workflows/CI/badge.svg)](https://github.com/qubitquilt/SupaControl/actions)
+[![codecov](https://codecov.io/gh/qubitquilt/SupaControl/branch/main/graph/badge.svg)](https://codecov.io/gh/qubitquilt/SupaControl)
+[![Go Report Card](https://goreportcard.com/badge/github.com/qubitquilt/SupaControl)](https://goreportcard.com/report/github.com/qubitquilt/SupaControl)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **SupaControl** is a self-hosted management platform for orchestrating multi-tenant Supabase instances on Kubernetes. It provides a robust API and web dashboard for automated provisioning, monitoring, and lifecycle management of Supabase deployments.
 
 ## Overview
@@ -291,6 +296,50 @@ npm run dev
 # Build for production
 npm run build
 ```
+
+### Testing
+
+#### Run All Tests
+
+```bash
+make test
+```
+
+#### Backend Tests
+
+```bash
+cd server
+go test -v ./...
+
+# With coverage
+go test -v -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+#### Frontend Tests
+
+```bash
+cd ui
+npm test
+
+# With coverage
+npm run test:coverage
+
+# Interactive UI
+npm run test:ui
+```
+
+#### Test Coverage
+
+```bash
+# Generate coverage report for all components
+make test-coverage
+
+# View coverage report
+open coverage/coverage.html
+```
+
+Our CI pipeline automatically runs tests and reports coverage to Codecov on every push.
 
 ### Build Docker Image
 
