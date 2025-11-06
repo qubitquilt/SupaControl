@@ -99,14 +99,38 @@ SupaControl acts as a control plane that:
 
 ## Quick Start
 
-### 1. Clone the Repository
+### Option 1: Interactive Installer (Recommended)
+
+The easiest way to install SupaControl is using our interactive CLI installer:
+
+```bash
+git clone https://github.com/qubitquilt/SupaControl.git
+cd SupaControl/cli
+npm install
+npm start
+```
+
+The installer will:
+- ✅ Check prerequisites (kubectl, helm, k8s connection)
+- 🔐 Generate secure secrets automatically
+- 📝 Guide you through configuration
+- 🚀 Deploy to your Kubernetes cluster
+- 📋 Provide access information and next steps
+
+**See [cli/README.md](cli/README.md) for detailed installer documentation.**
+
+### Option 2: Manual Installation
+
+If you prefer manual control:
+
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/qubitquilt/SupaControl.git
 cd SupaControl
 ```
 
-### 2. Deploy SupaControl
+#### 2. Deploy SupaControl
 
 Create a `values.yaml` file:
 
