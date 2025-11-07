@@ -14,8 +14,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	"github.com/qubitquilt/supacontrol/server/api"
+	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	"github.com/qubitquilt/supacontrol/server/controllers"
 	"github.com/qubitquilt/supacontrol/server/internal/auth"
 	"github.com/qubitquilt/supacontrol/server/internal/config"

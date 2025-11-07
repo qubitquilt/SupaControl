@@ -10,8 +10,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	apitypes "github.com/qubitquilt/supacontrol/pkg/api-types"
+	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	"github.com/qubitquilt/supacontrol/server/internal/auth"
 	"github.com/qubitquilt/supacontrol/server/internal/db"
 	"github.com/qubitquilt/supacontrol/server/internal/k8s"
