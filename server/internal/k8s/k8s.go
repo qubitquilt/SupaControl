@@ -199,11 +199,6 @@ func (c *Client) DeleteIngress(ctx context.Context, namespace, name string) erro
 	return nil
 }
 
-// GetConfig returns the Kubernetes REST config
-func (c *Client) GetConfig() *rest.Config {
-	return c.config
-}
-
 // GenerateRandomString generates a random base64 encoded string
 func GenerateRandomString(length int) (string, error) {
 	bytes := make([]byte, length)
