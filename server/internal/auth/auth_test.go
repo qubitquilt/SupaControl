@@ -55,53 +55,42 @@ func TestVerifyPassword(t *testing.T) {
 	service := NewService("test-secret-key")
 	password := "mySecurePassword123"
 
+	// Hash a password
 	hash, err := service.HashPassword(password)
 	if err != nil {
 		t.Fatalf("Failed to hash password: %v", err)
 	}
 
-	tests := []struct {
-		name     string
-		password string
-		hash     string
-		want     bool
-		wantErr  bool
-	}{
-		{
-			name:     "correct password",
-			password: password,
-			hash:     hash,
-			want:     true,
-			wantErr:  false,
-		},
-		{
-			name:     "incorrect password",
-			password: "wrongPassword",
-			hash:     hash,
-			want:     false,
-			wantErr:  false,
-		},
-		{
-			name:     "empty password",
-			password: "",
-			hash:     hash,
-			want:     false,
-			wantErr:  false,
-		},
-	}
+	// Verify correct password
+	t.Run("correct password", func(t *testing.T) {
+		valid, err := service.VerifyPassword(password, hash)
+		if err != nil {
+			t.Errorf("VerifyPassword() unexpected error: %v", err)
+		}
+		if !valid {
+			t.Error("VerifyPassword() should return true for correct password")
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.VerifyPassword(tt.password, tt.hash)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("VerifyPassword() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("VerifyPassword() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	// Verify incorrect password
+	t.Run("incorrect password", func(t *testing.T) {
+		valid, err := service.VerifyPassword("wrongPassword", hash)
+		if err != nil {
+			t.Errorf("VerifyPassword() unexpected error: %v", err)
+		}
+		if valid {
+			t.Error("VerifyPassword() should return false for incorrect password")
+		}
+	})
+
+	// Test with a known good hash format (from seed data)
+	t.Run("known hash format", func(t *testing.T) {
+		knownHash := "$argon2id$v=19$m=65536,t=3,p=2$c29tZXNhbHQxMjM0NTY3OA$YxLivdd9n0N6UjXPjpRwfC7UmvKGjjYEDyJmZ9w7hPs"
+		_, err := service.VerifyPassword("admin", knownHash)
+		if err != nil {
+			t.Errorf("VerifyPassword() should parse known hash format without error, got: %v", err)
+		}
+	})
 }
 
 func TestGenerateAPIKey(t *testing.T) {

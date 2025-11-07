@@ -188,7 +188,7 @@ function Settings({ onLogout }) {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>API Key Generated</h2>
             <p className="warning">
-              Save this API key now. You won't be able to see it again!
+              Save this API key now. You will not be able to see it again!
             </p>
             <div className="key-display">
               <code>{newKey}</code>
