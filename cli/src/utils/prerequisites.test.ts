@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { execa } from 'execa';
+import { execa, type ExecaChildProcess } from 'execa';
 import {
   checkPrerequisites,
   checkKubernetesConnection,
