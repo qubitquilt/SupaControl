@@ -76,10 +76,10 @@ func (o *Orchestrator) CreateInstance(ctx context.Context, projectName string) (
 
 	// Create secrets in Kubernetes
 	secretData := map[string][]byte{
-		"postgres-password":  []byte(postgresPassword),
-		"jwt-secret":         []byte(jwtSecret),
-		"anon-key":           []byte(anonKey),
-		"service-role-key":   []byte(serviceRoleKey),
+		"postgres-password": []byte(postgresPassword),
+		"jwt-secret":        []byte(jwtSecret),
+		"anon-key":          []byte(anonKey),
+		"service-role-key":  []byte(serviceRoleKey),
 	}
 
 	if err := o.k8sClient.CreateSecret(ctx, namespace, fmt.Sprintf("%s-secrets", projectName), secretData, labels); err != nil {
@@ -162,7 +162,7 @@ func (o *Orchestrator) installHelmChart(namespace, releaseName, postgresPassword
 	client.Namespace = namespace
 	client.ReleaseName = releaseName
 	client.CreateNamespace = false // We already created it
-	client.Wait = false // Don't wait for resources to be ready (async)
+	client.Wait = false            // Don't wait for resources to be ready (async)
 	client.Timeout = 0
 
 	// Set chart version if specified

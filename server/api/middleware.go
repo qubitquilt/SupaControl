@@ -73,7 +73,11 @@ func authenticateAPIKey(c echo.Context, next echo.HandlerFunc, authService *auth
 	}
 
 	// Update last used timestamp (async, don't wait)
-	go dbClient.UpdateAPIKeyLastUsed(apiKeyRecord.ID)
+	go func() {
+		if err := dbClient.UpdateAPIKeyLastUsed(apiKeyRecord.ID); err != nil {
+			fmt.Printf("Failed to update API key last used timestamp: %v\n", err)
+		}
+	}()
 
 	// Set auth context
 	c.Set("auth", &AuthContext{

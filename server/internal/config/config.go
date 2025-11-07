@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 )
 
 // Config holds all application configuration
@@ -28,8 +27,8 @@ type Config struct {
 	DefaultIngressDomain string
 
 	// Supabase Helm chart configuration
-	SupabaseChartRepo string
-	SupabaseChartName string
+	SupabaseChartRepo    string
+	SupabaseChartName    string
 	SupabaseChartVersion string
 }
 
@@ -85,19 +84,6 @@ func (c *Config) GetServerAddr() string {
 func getEnv(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
-		return defaultValue
-	}
-	return value
-}
-
-// getEnvAsInt gets an environment variable as an integer with a fallback default value
-func getEnvAsInt(key string, defaultValue int) int {
-	valueStr := os.Getenv(key)
-	if valueStr == "" {
-		return defaultValue
-	}
-	value, err := strconv.Atoi(valueStr)
-	if err != nil {
 		return defaultValue
 	}
 	return value
