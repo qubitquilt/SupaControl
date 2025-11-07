@@ -155,6 +155,7 @@ jobs:
       run: |
         cd server
         go mod download
+        go mod tidy
 
     - name: Build backend
       run: |
