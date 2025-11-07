@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -716,7 +717,7 @@ func (r *SupabaseInstanceReconciler) uninstallHelmChart(ctx context.Context, nam
 // transitionToFailed moves the instance to Failed phase
 func (r *SupabaseInstanceReconciler) transitionToFailed(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance, errorMsg string) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.Error(fmt.Errorf(errorMsg), "Instance provisioning failed", "projectName", instance.Spec.ProjectName)
+	logger.Error(errors.New(errorMsg), "Instance provisioning failed", "projectName", instance.Spec.ProjectName)
 
 	instance.Status.Phase = supacontrolv1alpha1.PhaseFailed
 	instance.Status.ErrorMessage = errorMsg
