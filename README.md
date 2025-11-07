@@ -196,6 +196,38 @@ Once deployed, access the web dashboard at `https://supacontrol.yourdomain.com`
 
 ⚠️ **IMPORTANT**: Change the default password immediately after first login!
 
+## CLI Tool
+
+For command-line management of your SupaControl instances, use **[supactl](https://github.com/qubitquilt/supactl)** - a modern, cross-platform CLI tool.
+
+### Quick Install
+
+```bash
+curl -sSL https://raw.githubusercontent.com/qubitquilt/supactl/main/scripts/install.sh | bash
+```
+
+### Usage
+
+```bash
+# Login to your SupaControl server
+supactl login https://supacontrol.yourdomain.com
+
+# Manage instances
+supactl create my-project
+supactl list
+supactl status my-project
+supactl delete my-project
+```
+
+**Features:**
+- 🚀 Single binary, cross-platform (Linux, macOS, Windows)
+- 🔐 Secure authentication and credential management
+- 📂 Link local directories to remote instances
+- 🎨 Beautiful interactive CLI with prompts
+- 🐳 Local Docker management mode (no server required)
+
+See the **[supactl documentation](https://github.com/qubitquilt/supactl)** for complete CLI reference.
+
 ## API Documentation
 
 ### Authentication
