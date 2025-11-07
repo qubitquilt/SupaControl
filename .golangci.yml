@@ -1,0 +1,35 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+
+linters-settings:
+  gofmt:
+    simplify: true
+
+issues:
+  exclude-rules:
+    # Exclude test files from certain linters
+    - path: _test\.go
+      linters:
+        - errcheck
+        - unused
+
+  # Maximum issues count per one linter
+  max-issues-per-linter: 50
+
+  # Maximum count of issues with the same text
+  max-same-issues: 3
+
+output:
+  sort-results: true

@@ -1,6 +1,6 @@
 module github.com/qubitquilt/supacontrol/server
 
-go 1.21
+go 1.24.7
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.0

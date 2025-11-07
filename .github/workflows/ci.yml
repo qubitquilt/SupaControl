@@ -33,6 +33,7 @@ jobs:
       run: |
         cd server
         go mod download
+        go mod tidy
 
     - name: Run tests with coverage
       run: |
@@ -62,13 +63,11 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: ui/package-lock.json
 
     - name: Install dependencies
       run: |
         cd ui
-        npm ci
+        npm install
 
     - name: Run tests with coverage
       run: |
@@ -116,13 +115,11 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: ui/package-lock.json
 
     - name: Install dependencies
       run: |
         cd ui
-        npm ci
+        npm install
 
     - name: Run ESLint
       run: |
@@ -155,7 +152,7 @@ jobs:
     - name: Build frontend
       run: |
         cd ui
-        npm ci
+        npm install
         npm run build
 
     - name: Upload artifacts
