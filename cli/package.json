@@ -10,6 +10,7 @@
     "dev": "node --loader tsx --watch src/cli.tsx",
     "build": "esbuild src/cli.tsx --bundle --platform=node --target=node18 --outfile=dist/cli.js --banner:js='#!/usr/bin/env node' --external:react --external:ink --external:ink-*",
     "prepublishOnly": "npm run build",
+    "postinstall": "patch-package",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -28,7 +29,7 @@
     "ink-text-input": "^5.0.1",
     "ink-select-input": "^5.0.0",
     "ink-spinner": "^5.0.0",
-    "ink-box": "^3.0.0",
+    "ink-box": "^2.0.0",
     "ink-gradient": "^3.0.0",
     "ink-big-text": "^2.0.0",
     "react": "^18.2.0",
@@ -43,6 +44,7 @@
     "@types/react": "^18.2.46",
     "@vitest/coverage-v8": "^1.1.0",
     "esbuild": "^0.19.11",
+    "patch-package": "^8.0.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0"
