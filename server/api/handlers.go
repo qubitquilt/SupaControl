@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -136,8 +137,8 @@ func (h *Handler) CreateAPIKey(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, apitypes.CreateAPIKeyResponse{
-		Key:    apiKey,
-		APIKey: apiKeyRecord,
+		Key:     apiKey,
+		APIKey:  apiKeyRecord,
 		Message: "API key created successfully. Save this key securely - it won't be shown again!",
 	})
 }
@@ -256,14 +257,18 @@ func (h *Handler) provisionInstance(projectName string) {
 	if err != nil {
 		// Update instance status to FAILED
 		errMsg := err.Error()
-		h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg)
+		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
+		}
 		return
 	}
 
 	// Update instance with full details
 	if err := h.dbClient.UpdateInstance(instance); err != nil {
 		errMsg := err.Error()
-		h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg)
+		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
+		}
 		return
 	}
 }
@@ -333,14 +338,18 @@ func (h *Handler) deleteInstance(projectName, namespace string) {
 	if err := h.orchestrator.DeleteInstance(ctx, projectName, namespace); err != nil {
 		// Update instance status to FAILED
 		errMsg := fmt.Sprintf("failed to delete: %v", err)
-		h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg)
+		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
+		}
 		return
 	}
 
 	// Remove from database
 	if err := h.dbClient.DeleteInstance(projectName); err != nil {
 		errMsg := fmt.Sprintf("failed to remove from database: %v", err)
-		h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg)
+		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
+		}
 		return
 	}
 }

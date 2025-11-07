@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('server/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: |
+        cd server
+        go mod download
+        go mod tidy
+
+    - name: Run tests with coverage
+      run: |
+        cd server
+        go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./server/coverage.out
+        flags: backend
+        name: backend-coverage
+
+    - name: Generate coverage report
+      run: |
+        cd server
+        go tool cover -func=coverage.out
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: |
+        cd ui
+        npm install
+
+    - name: Run tests with coverage
+      run: |
+        cd ui
+        npm run test:coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./ui/coverage/coverage-final.json
+        flags: frontend
+        name: frontend-coverage
+
+  lint-backend:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Download and verify dependencies
+      run: |
+        cd server
+        go mod download
+        go mod tidy -v
+        go mod verify
+
+    - name: Run go vet
+      run: |
+        cd server
+        go vet ./...
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        working-directory: server
+
+  lint-frontend:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: |
+        cd ui
+        npm install
+
+    - name: Run ESLint
+      run: |
+        cd ui
+        npm run lint
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend, lint-backend, lint-frontend]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Download Go dependencies
+      run: |
+        cd server
+        go mod download
+        go mod tidy
+
+    - name: Build backend
+      run: |
+        cd server
+        go build -v -o supacontrol main.go
+
+    - name: Build frontend
+      run: |
+        cd ui
+        npm install
+        npm run build
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        path: |
+          server/supacontrol
+          ui/dist/

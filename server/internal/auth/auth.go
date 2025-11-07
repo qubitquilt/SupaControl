@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -51,24 +52,47 @@ func (s *Service) HashPassword(password string) (string, error) {
 
 // VerifyPassword verifies a password against a hash
 func (s *Service) VerifyPassword(password, encodedHash string) (bool, error) {
-	// Parse the encoded hash
-	var version int
-	var memory, time uint32
-	var threads uint8
-	var encodedSalt, hash string
-
-	_, err := fmt.Sscanf(encodedHash, "$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		&version, &memory, &time, &threads, &encodedSalt, &hash)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse hash: %w", err)
+	// Parse the encoded hash using strings.Split
+	// Format: $argon2id$v=19$m=65536,t=3,p=2$<base64_salt>$<base64_hash>
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 6 {
+		return false, fmt.Errorf("invalid hash format: expected 6 parts, got %d", len(parts))
 	}
 
-	salt, err := base64.RawStdEncoding.DecodeString(encodedSalt)
+	// parts[0] = "" (empty before first $)
+	// parts[1] = "argon2id"
+	// parts[2] = "v=19"
+	// parts[3] = "m=65536,t=3,p=2"
+	// parts[4] = base64_salt
+	// parts[5] = base64_hash
+
+	if parts[1] != "argon2id" {
+		return false, fmt.Errorf("invalid algorithm: expected argon2id, got %s", parts[1])
+	}
+
+	// Parse version
+	var version int
+	_, err := fmt.Sscanf(parts[2], "v=%d", &version)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse version: %w", err)
+	}
+
+	// Parse parameters
+	var memory, time uint32
+	var threads uint8
+	_, err = fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &time, &threads)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse parameters: %w", err)
+	}
+
+	// Decode salt
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
 		return false, fmt.Errorf("failed to decode salt: %w", err)
 	}
 
-	decodedHash, err := base64.RawStdEncoding.DecodeString(hash)
+	// Decode hash
+	decodedHash, err := base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
 		return false, fmt.Errorf("failed to decode hash: %w", err)
 	}

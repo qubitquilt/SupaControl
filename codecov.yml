@@ -1,0 +1,45 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+    patch:
+      default:
+        target: 70%
+
+  ignore:
+    - "**/*_test.go"
+    - "**/test/**"
+    - "**/tests/**"
+    - "ui/src/test/**"
+    - "**/*.test.js"
+    - "**/*.test.jsx"
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
+    - "**/*.config.js"
+    - "**/*.config.ts"
+    - "cli/src/cli.tsx"
+    - "cli/src/components/Welcome.tsx"
+    - "cli/src/components/Complete.tsx"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+
+flags:
+  backend:
+    paths:
+      - server/
+    carryforward: true
+
+  frontend:
+    paths:
+      - ui/src/
+    carryforward: true
+
+  cli:
+    paths:
+      - cli/src/
+    carryforward: true
