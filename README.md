@@ -2,7 +2,7 @@
 
 [![GitHub Actions](https://img.shields.io/github/actions/workflow/status/qubitquilt/SupaControl/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/qubitquilt/SupaControl/actions)
 [![Codecov](https://img.shields.io/codecov/c/github/qubitquilt/SupaControl?style=for-the-badge&logo=codecov&logoColor=white)](https://codecov.io/gh/qubitquilt/SupaControl)
-[![Go Report Card](https://img.shields.io/badge/go%20report-A+-brightgreen?style=for-the-badge&logo=go&logoColor=white)](https://goreportcard.com/report/github.com/qubitquilt/SupaControl)
+[![Go Report Card](https://img.shields.io/badge/go%20report-A+-brightgreen?style=for-the-badge&logo=go&logoColor=white)](https://goreportcard.com/report/github.com/qubitquilt/supacontrol/server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 ## Built With
