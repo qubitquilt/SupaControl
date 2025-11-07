@@ -34,5 +34,8 @@
     "vite": "^5.0.8",
     "vitest": "^1.1.0",
     "@vitest/coverage-v8": "^1.1.0"
+  },
+  "overrides": {
+    "rollup": "4.52.5"
   }
 }
