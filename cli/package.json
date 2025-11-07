@@ -6,8 +6,8 @@
     "supacontrol-install": "./dist/cli.js"
   },
   "scripts": {
-    "start": "node --loader tsx src/cli.tsx",
-    "dev": "node --loader tsx --watch src/cli.tsx",
+    "start": "node --import tsx src/cli.tsx",
+    "dev": "node --import tsx --watch src/cli.tsx",
     "build": "esbuild src/cli.tsx --bundle --platform=node --target=node18 --outfile=dist/cli.js --banner:js='#!/usr/bin/env node' --external:react --external:ink --external:ink-*",
     "prepublishOnly": "npm run build",
     "postinstall": "patch-package",
