@@ -14,15 +14,15 @@ const (
 
 // Instance represents a managed Supabase instance
 type Instance struct {
-	ID               int64          `json:"id" db:"id"`
-	ProjectName      string         `json:"project_name" db:"project_name"`
-	Namespace        string         `json:"namespace" db:"namespace"`
-	Status           InstanceStatus `json:"status" db:"status"`
-	StudioURL        string         `json:"studio_url" db:"studio_url"`
-	APIURL           string         `json:"api_url" db:"api_url"`
-	CreatedAt        time.Time      `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at" db:"updated_at"`
-	ErrorMessage     *string        `json:"error_message,omitempty" db:"error_message"`
+	ID           int64          `json:"id" db:"id"`
+	ProjectName  string         `json:"project_name" db:"project_name"`
+	Namespace    string         `json:"namespace" db:"namespace"`
+	Status       InstanceStatus `json:"status" db:"status"`
+	StudioURL    string         `json:"studio_url" db:"studio_url"`
+	APIURL       string         `json:"api_url" db:"api_url"`
+	CreatedAt    time.Time      `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at" db:"updated_at"`
+	ErrorMessage *string        `json:"error_message,omitempty" db:"error_message"`
 }
 
 // CreateInstanceRequest represents the request body for creating a new instance
@@ -79,11 +79,11 @@ type UserInfo struct {
 
 // APIKey represents an API key
 type APIKey struct {
-	ID        int64     `json:"id" db:"id"`
-	UserID    int64     `json:"user_id" db:"user_id"`
-	Name      string    `json:"name" db:"name"`
-	KeyHash   string    `json:"-" db:"key_hash"` // Never expose the hash
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ID        int64      `json:"id" db:"id"`
+	UserID    int64      `json:"user_id" db:"user_id"`
+	Name      string     `json:"name" db:"name"`
+	KeyHash   string     `json:"-" db:"key_hash"` // Never expose the hash
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty" db:"expires_at"`
 	LastUsed  *time.Time `json:"last_used,omitempty" db:"last_used"`
 }
@@ -96,9 +96,9 @@ type CreateAPIKeyRequest struct {
 
 // CreateAPIKeyResponse represents the response containing the new API key
 type CreateAPIKeyResponse struct {
-	Key       string    `json:"key"` // The actual key - only returned once!
-	APIKey    *APIKey   `json:"api_key"`
-	Message   string    `json:"message"`
+	Key     string  `json:"key"` // The actual key - only returned once!
+	APIKey  *APIKey `json:"api_key"`
+	Message string  `json:"message"`
 }
 
 // ListAPIKeysResponse represents the response for listing API keys

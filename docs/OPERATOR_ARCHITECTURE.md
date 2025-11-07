@@ -459,11 +459,43 @@ spec:
               value: "nginx"
             - name: DEFAULT_INGRESS_DOMAIN
               value: "example.com"
+            - name: CERT_MANAGER_ISSUER
+              value: "letsencrypt-prod"  # or letsencrypt-staging for testing
+            - name: LEADER_ELECTION_ENABLED
+              value: "false"  # Set to "true" for multi-replica HA deployments
 ```
 
 **Important:** The server binary now runs both:
 - HTTP API server (port 8080)
 - Controller manager (background)
+
+**High Availability (HA) Deployment:**
+
+For production deployments, run multiple replicas with leader election enabled:
+
+```yaml
+spec:
+  replicas: 3  # Multiple replicas for HA
+  template:
+    spec:
+      serviceAccountName: supacontrol-controller
+      containers:
+        - name: server
+          image: your-registry/supacontrol-server:latest
+          env:
+            # ... other env vars ...
+            - name: LEADER_ELECTION_ENABLED
+              value: "true"  # REQUIRED for multi-replica deployments
+```
+
+**Why Leader Election is Critical for HA:**
+- Prevents multiple controllers from reconciling the same `SupabaseInstance` simultaneously
+- Avoids race conditions and resource conflicts
+- Only the elected leader actively reconciles; other replicas remain on standby
+- If the leader pod fails, a new leader is automatically elected
+
+**Environment Variables:**
+- `LEADER_ELECTION_ENABLED`: Set to `"true"` for multi-replica deployments (default: `false`)
 
 #### 5. Verify Controller
 

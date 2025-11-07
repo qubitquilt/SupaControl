@@ -77,8 +77,8 @@ func run() error {
 
 	mgr, err := ctrl.NewManager(k8sClient.GetConfig(), ctrl.Options{
 		Scheme: crClient.GetScheme(),
-		// LeaderElection can be enabled for HA deployments
-		LeaderElection:   false,
+		// LeaderElection for HA deployments (configured via LEADER_ELECTION_ENABLED env var)
+		LeaderElection:   cfg.LeaderElectionEnabled,
 		LeaderElectionID: "supacontrol-leader-election",
 	})
 	if err != nil {

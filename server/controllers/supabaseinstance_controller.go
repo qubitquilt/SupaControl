@@ -191,6 +191,9 @@ func (r *SupabaseInstanceReconciler) reconcileProvisioning(ctx context.Context, 
 		Message:            "Instance is running and ready",
 	})
 
+	// Update observedGeneration to indicate this spec has been reconciled
+	instance.Status.ObservedGeneration = instance.Generation
+
 	if err := r.Status().Update(ctx, instance); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -525,7 +528,7 @@ func (r *SupabaseInstanceReconciler) ensureHelmRelease(ctx context.Context, inst
 	installClient.ReleaseName = releaseName
 	installClient.CreateNamespace = false
 	installClient.Wait = false
-	installClient.Timeout = 0
+	installClient.Timeout = 10 * time.Minute // Prevent indefinite hangs
 
 	// Set chart version
 	chartVersion := r.ChartVersion
@@ -704,7 +707,7 @@ func (r *SupabaseInstanceReconciler) uninstallHelmChart(ctx context.Context, nam
 
 	client := action.NewUninstall(actionConfig)
 	client.Wait = false
-	client.Timeout = 0
+	client.Timeout = 5 * time.Minute // Prevent indefinite hangs
 
 	_, err := client.Run(releaseName)
 	if err != nil {
