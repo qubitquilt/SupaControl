@@ -11,7 +11,12 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	"github.com/qubitquilt/supacontrol/server/api"
+	"github.com/qubitquilt/supacontrol/server/controllers"
 	"github.com/qubitquilt/supacontrol/server/internal/auth"
 	"github.com/qubitquilt/supacontrol/server/internal/config"
 	"github.com/qubitquilt/supacontrol/server/internal/db"
@@ -60,23 +65,72 @@ func run() error {
 	}
 	log.Println("Connected to Kubernetes cluster")
 
-	// Initialize orchestrator
-	orchestrator := k8s.NewOrchestrator(
-		k8sClient,
-		cfg.SupabaseChartRepo,
-		cfg.SupabaseChartName,
-		cfg.SupabaseChartVersion,
-		cfg.DefaultIngressClass,
-		cfg.DefaultIngressDomain,
-	)
-	log.Println("Initialized orchestrator")
+	// Initialize CR client for API handlers
+	crClient, err := k8s.NewCRClient(k8sClient.GetConfig())
+	if err != nil {
+		return fmt.Errorf("failed to create CR client: %w", err)
+	}
+	log.Println("Initialized CR client")
+
+	// Set up controller manager
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	mgr, err := ctrl.NewManager(k8sClient.GetConfig(), ctrl.Options{
+		Scheme: crClient.GetScheme(),
+		// LeaderElection can be enabled for HA deployments
+		LeaderElection:   false,
+		LeaderElectionID: "supacontrol-leader-election",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create controller manager: %w", err)
+	}
+
+	// Register the CRD scheme
+	if err := supacontrolv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		return fmt.Errorf("failed to add scheme: %w", err)
+	}
+
+	// Set up the controller
+	reconciler := &controllers.SupabaseInstanceReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		ChartRepo:            cfg.SupabaseChartRepo,
+		ChartName:            cfg.SupabaseChartName,
+		ChartVersion:         cfg.SupabaseChartVersion,
+		DefaultIngressClass:  cfg.DefaultIngressClass,
+		DefaultIngressDomain: cfg.DefaultIngressDomain,
+	}
+
+	if err := reconciler.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("failed to setup controller: %w", err)
+	}
+
+	log.Println("Initialized controller manager")
+
+	// Start controller manager in background
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		log.Println("Starting controller manager...")
+		if err := mgr.Start(ctx); err != nil {
+			log.Fatalf("Controller manager error: %v", err)
+		}
+	}()
+
+	// Wait for controller cache to sync
+	log.Println("Waiting for controller cache to sync...")
+	if !mgr.GetCache().WaitForCacheSync(ctx) {
+		return fmt.Errorf("failed to sync controller cache")
+	}
+	log.Println("Controller cache synced")
 
 	// Initialize Echo server
 	e := echo.New()
 	e.HideBanner = true
 
-	// Initialize handler
-	handler := api.NewHandler(authService, dbClient, orchestrator)
+	// Initialize handler with CR client
+	handler := api.NewHandler(authService, dbClient, crClient)
 
 	// Setup routes
 	api.SetupRouter(e, handler, authService, dbClient)
@@ -107,11 +161,15 @@ func run() error {
 
 	log.Println("Shutting down server...")
 
-	// Gracefully shutdown the server with a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// Stop controller manager first
+	cancel()
+	log.Println("Controller manager stopped")
 
-	if err := e.Shutdown(ctx); err != nil {
+	// Gracefully shutdown the HTTP server with a timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := e.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
 

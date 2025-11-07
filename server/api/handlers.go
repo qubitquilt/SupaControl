@@ -8,6 +8,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	apitypes "github.com/qubitquilt/supacontrol/pkg/api-types"
 	"github.com/qubitquilt/supacontrol/server/internal/auth"
 	"github.com/qubitquilt/supacontrol/server/internal/db"
@@ -16,17 +20,18 @@ import (
 
 // Handler holds dependencies for API handlers
 type Handler struct {
-	authService  *auth.Service
-	dbClient     *db.Client
-	orchestrator *k8s.Orchestrator
+	authService *auth.Service
+	dbClient    *db.Client
+	crClient    *k8s.CRClient
+	// Optional: keep dbClient for backward compatibility or remove if using K8s as sole source of truth
 }
 
 // NewHandler creates a new API handler
-func NewHandler(authService *auth.Service, dbClient *db.Client, orchestrator *k8s.Orchestrator) *Handler {
+func NewHandler(authService *auth.Service, dbClient *db.Client, crClient *k8s.CRClient) *Handler {
 	return &Handler{
-		authService:  authService,
-		dbClient:     dbClient,
-		orchestrator: orchestrator,
+		authService: authService,
+		dbClient:    dbClient,
+		crClient:    crClient,
 	}
 }
 
@@ -219,65 +224,59 @@ func (h *Handler) CreateInstance(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "project name is required")
 	}
 
-	// Check if instance already exists
-	exists, err := h.dbClient.InstanceExists(req.Name)
-	if err != nil {
+	ctx := c.Request().Context()
+
+	// Check if instance already exists in K8s
+	_, err := h.crClient.GetSupabaseInstance(ctx, req.Name)
+	if err == nil {
+		return echo.NewHTTPError(http.StatusConflict, "instance with this name already exists")
+	}
+	if !apierrors.IsNotFound(err) {
+		slog.Error("Failed to check instance existence", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to check instance existence")
 	}
 
-	if exists {
-		return echo.NewHTTPError(http.StatusConflict, "instance with this name already exists")
+	// Create SupabaseInstance CR
+	instance := &supacontrolv1alpha1.SupabaseInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: req.Name,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "supacontrol-api",
+			},
+		},
+		Spec: supacontrolv1alpha1.SupabaseInstanceSpec{
+			ProjectName: req.Name,
+		},
 	}
 
-	// Create instance record with PROVISIONING status
-	instance := &apitypes.Instance{
-		ProjectName: req.Name,
-		Namespace:   fmt.Sprintf("supa-%s", req.Name),
-		Status:      apitypes.StatusProvisioning,
+	if err := h.crClient.CreateSupabaseInstance(ctx, instance); err != nil {
+		slog.Error("Failed to create SupabaseInstance CR", "error", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create instance")
 	}
 
-	if err := h.dbClient.StoreInstance(instance); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to store instance")
-	}
-
-	// Provision instance asynchronously
-	go h.provisionInstance(req.Name)
+	// Convert CR to API response
+	apiInstance := h.convertCRToAPIType(instance)
 
 	return c.JSON(http.StatusAccepted, apitypes.CreateInstanceResponse{
-		Instance: instance,
+		Instance: apiInstance,
 		Message:  "Instance provisioning started",
 	})
 }
 
-// provisionInstance handles the async provisioning of an instance
-func (h *Handler) provisionInstance(projectName string) {
-	ctx := context.Background()
-
-	instance, err := h.orchestrator.CreateInstance(ctx, projectName)
-	if err != nil {
-		// Update instance status to FAILED
-		errMsg := err.Error()
-		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
-		}
-		return
-	}
-
-	// Update instance with full details
-	if err := h.dbClient.UpdateInstance(instance); err != nil {
-		errMsg := err.Error()
-		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
-		}
-		return
-	}
-}
-
 // ListInstances lists all Supabase instances
 func (h *Handler) ListInstances(c echo.Context) error {
-	instances, err := h.dbClient.ListInstances()
+	ctx := c.Request().Context()
+
+	crList, err := h.crClient.ListSupabaseInstances(ctx)
 	if err != nil {
+		slog.Error("Failed to list instances", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list instances")
+	}
+
+	// Convert CRs to API types
+	instances := make([]*apitypes.Instance, 0, len(crList.Items))
+	for i := range crList.Items {
+		instances = append(instances, h.convertCRToAPIType(&crList.Items[i]))
 	}
 
 	return c.JSON(http.StatusOK, apitypes.ListInstancesResponse{
@@ -289,67 +288,87 @@ func (h *Handler) ListInstances(c echo.Context) error {
 // GetInstance gets a single Supabase instance
 func (h *Handler) GetInstance(c echo.Context) error {
 	name := c.Param("name")
+	ctx := c.Request().Context()
 
-	instance, err := h.dbClient.GetInstance(name)
+	instance, err := h.crClient.GetSupabaseInstance(ctx, name)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
+		}
+		slog.Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
-	if instance == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "instance not found")
-	}
-
 	return c.JSON(http.StatusOK, apitypes.GetInstanceResponse{
-		Instance: instance,
+		Instance: h.convertCRToAPIType(instance),
 	})
 }
 
 // DeleteInstance deletes a Supabase instance
 func (h *Handler) DeleteInstance(c echo.Context) error {
 	name := c.Param("name")
+	ctx := c.Request().Context()
 
-	// Get instance
-	instance, err := h.dbClient.GetInstance(name)
+	// Check if instance exists
+	_, err := h.crClient.GetSupabaseInstance(ctx, name)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
+		}
+		slog.Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
-	if instance == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "instance not found")
+	// Delete SupabaseInstance CR (controller will handle cleanup via finalizer)
+	if err := h.crClient.DeleteSupabaseInstance(ctx, name); err != nil {
+		slog.Error("Failed to delete SupabaseInstance CR", "error", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete instance")
 	}
-
-	// Update status to DELETING
-	if err := h.dbClient.UpdateInstanceStatus(name, apitypes.StatusDeleting, nil); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update instance status")
-	}
-
-	// Delete instance asynchronously
-	go h.deleteInstance(name, instance.Namespace)
 
 	return c.JSON(http.StatusAccepted, apitypes.DeleteInstanceResponse{
 		Message: "Instance deletion started",
 	})
 }
 
-// deleteInstance handles the async deletion of an instance
-func (h *Handler) deleteInstance(projectName, namespace string) {
-	ctx := context.Background()
-
-	if err := h.orchestrator.DeleteInstance(ctx, projectName, namespace); err != nil {
-		// Update instance status to FAILED
-		errMsg := fmt.Sprintf("failed to delete: %v", err)
-		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
-		}
-		return
+// convertCRToAPIType converts a SupabaseInstance CR to API type
+func (h *Handler) convertCRToAPIType(cr *supacontrolv1alpha1.SupabaseInstance) *apitypes.Instance {
+	// Map CR phase to API status
+	var status apitypes.InstanceStatus
+	switch cr.Status.Phase {
+	case supacontrolv1alpha1.PhasePending:
+		status = apitypes.StatusProvisioning
+	case supacontrolv1alpha1.PhaseProvisioning:
+		status = apitypes.StatusProvisioning
+	case supacontrolv1alpha1.PhaseRunning:
+		status = apitypes.StatusRunning
+	case supacontrolv1alpha1.PhaseDeleting:
+		status = apitypes.StatusDeleting
+	case supacontrolv1alpha1.PhaseFailed:
+		status = apitypes.StatusFailed
+	default:
+		status = apitypes.StatusProvisioning
 	}
 
-	// Remove from database
-	if err := h.dbClient.DeleteInstance(projectName); err != nil {
-		errMsg := fmt.Sprintf("failed to remove from database: %v", err)
-		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
-		}
-		return
+	instance := &apitypes.Instance{
+		ProjectName: cr.Spec.ProjectName,
+		Namespace:   cr.Status.Namespace,
+		Status:      status,
+		StudioURL:   cr.Status.StudioURL,
+		APIURL:      cr.Status.APIURL,
 	}
+
+	// Set error message if present
+	if cr.Status.ErrorMessage != "" {
+		instance.ErrorMessage = &cr.Status.ErrorMessage
+	}
+
+	// Set timestamps from CR metadata
+	if !cr.CreationTimestamp.IsZero() {
+		instance.CreatedAt = cr.CreationTimestamp.Time
+	}
+	if cr.Status.LastTransitionTime != nil {
+		instance.UpdatedAt = cr.Status.LastTransitionTime.Time
+	}
+
+	return instance
 }
