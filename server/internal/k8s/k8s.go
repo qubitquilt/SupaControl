@@ -57,6 +57,11 @@ func NewClient(kubeconfig string) (*Client, error) {
 	}, nil
 }
 
+// GetConfig returns the Kubernetes REST config
+func (c *Client) GetConfig() *rest.Config {
+	return c.config
+}
+
 // CreateNamespace creates a new Kubernetes namespace
 func (c *Client) CreateNamespace(ctx context.Context, name string, labels map[string]string) error {
 	namespace := &corev1.Namespace{
@@ -192,11 +197,6 @@ func (c *Client) DeleteIngress(ctx context.Context, namespace, name string) erro
 	}
 
 	return nil
-}
-
-// GetConfig returns the Kubernetes REST config
-func (c *Client) GetConfig() *rest.Config {
-	return c.config
 }
 
 // GenerateRandomString generates a random base64 encoded string

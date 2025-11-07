@@ -22,9 +22,11 @@ type Config struct {
 	JWTSecret string
 
 	// Kubernetes configuration
-	KubeConfig           string // Path to kubeconfig (empty means in-cluster)
-	DefaultIngressClass  string
-	DefaultIngressDomain string
+	KubeConfig            string // Path to kubeconfig (empty means in-cluster)
+	DefaultIngressClass   string
+	DefaultIngressDomain  string
+	CertManagerIssuer     string // cert-manager ClusterIssuer name for TLS
+	LeaderElectionEnabled bool   // Enable leader election for HA deployments
 
 	// Supabase Helm chart configuration
 	SupabaseChartRepo    string
@@ -46,9 +48,11 @@ func Load() (*Config, error) {
 
 		JWTSecret: getEnv("JWT_SECRET", ""),
 
-		KubeConfig:           getEnv("KUBECONFIG", ""),
-		DefaultIngressClass:  getEnv("DEFAULT_INGRESS_CLASS", "nginx"),
-		DefaultIngressDomain: getEnv("DEFAULT_INGRESS_DOMAIN", "supabase.example.com"),
+		KubeConfig:            getEnv("KUBECONFIG", ""),
+		DefaultIngressClass:   getEnv("DEFAULT_INGRESS_CLASS", "nginx"),
+		DefaultIngressDomain:  getEnv("DEFAULT_INGRESS_DOMAIN", "supabase.example.com"),
+		CertManagerIssuer:     getEnv("CERT_MANAGER_ISSUER", "letsencrypt-prod"),
+		LeaderElectionEnabled: getEnvBool("LEADER_ELECTION_ENABLED", false),
 
 		SupabaseChartRepo:    getEnv("SUPABASE_CHART_REPO", "https://supabase-community.github.io/supabase-kubernetes"),
 		SupabaseChartName:    getEnv("SUPABASE_CHART_NAME", "supabase"),
@@ -87,4 +91,14 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// getEnvBool gets a boolean environment variable with a fallback default value
+func getEnvBool(key string, defaultValue bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	// Accept "true", "1", "yes" as true, everything else as false
+	return value == "true" || value == "1" || value == "yes"
 }
