@@ -5,7 +5,7 @@ import {
   generateDatabasePassword,
   generateAPIKey,
   validateSecretStrength,
-} from './secrets';
+} from './secrets.js';
 
 describe('secrets utilities', () => {
   describe('generateSecureSecret', () => {

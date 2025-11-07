@@ -248,7 +248,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
           </Box>
           <Box marginTop={1}>
             <Text color="green">➜ </Text>
-            <TextInput value="" onSubmit={generateSecrets} showCursor={false} />
+            <TextInput value="" onChange={(value: string) => {}} onSubmit={generateSecrets} showCursor={false} />
           </Box>
         </Box>
       )}
@@ -311,7 +311,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
           </Box>
           <Box marginTop={1}>
             <Text color="green">➜ </Text>
-            <TextInput value="" onSubmit={confirmAndContinue} showCursor={false} />
+            <TextInput value="" onChange={(value: string) => {}} onSubmit={confirmAndContinue} showCursor={false} />
           </Box>
         </Box>
       )}

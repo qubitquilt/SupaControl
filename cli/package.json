@@ -2,13 +2,14 @@
   "name": "supacontrol-installer",
   "version": "0.1.0",
   "description": "Interactive installation wizard for SupaControl",
+  "type": "module",
   "bin": {
     "supacontrol-install": "./dist/cli.js"
   },
   "scripts": {
-    "start": "node --import tsx src/cli.tsx",
+    "start": "tsx src/cli.tsx",
     "dev": "node --import tsx --watch src/cli.tsx",
-    "build": "esbuild src/cli.tsx --bundle --platform=node --target=node18.19 --outfile=dist/cli.js --banner:js='#!/usr/bin/env node' --external:react --external:ink --external:ink-*",
+    "build": "esbuild src/cli.tsx --bundle --platform=node --target=node18.19 --outfile=dist/cli.js --external:react --external:ink --external:ink-*",
     "prepublishOnly": "npm run build",
     "postinstall": "patch-package",
     "test": "vitest run",
