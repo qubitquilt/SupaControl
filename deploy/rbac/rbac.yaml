@@ -38,7 +38,7 @@ rules:
     verbs:
       - update
 
-  # Namespace permissions
+  # Namespace permissions (cluster-scoped)
   - apiGroups:
       - ""
     resources:
@@ -52,59 +52,13 @@ rules:
       - patch
       - delete
 
-  # Secret permissions
+  # RBAC permissions to create namespace-scoped Roles and RoleBindings
+  # This allows the controller to create Roles in instance namespaces for least privilege
   - apiGroups:
-      - ""
+      - rbac.authorization.k8s.io
     resources:
-      - secrets
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-
-  # Ingress permissions
-  - apiGroups:
-      - networking.k8s.io
-    resources:
-      - ingresses
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-
-  # Service permissions (for watching)
-  - apiGroups:
-      - ""
-    resources:
-      - services
-    verbs:
-      - get
-      - list
-      - watch
-
-  # Pod permissions (for watching Helm releases)
-  - apiGroups:
-      - ""
-    resources:
-      - pods
-    verbs:
-      - get
-      - list
-      - watch
-
-  # ConfigMap permissions (for Helm)
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
+      - roles
+      - rolebindings
     verbs:
       - get
       - list

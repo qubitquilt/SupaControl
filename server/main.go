@@ -99,6 +99,7 @@ func run() error {
 		ChartVersion:         cfg.SupabaseChartVersion,
 		DefaultIngressClass:  cfg.DefaultIngressClass,
 		DefaultIngressDomain: cfg.DefaultIngressDomain,
+		CertManagerIssuer:    cfg.CertManagerIssuer,
 	}
 
 	if err := reconciler.SetupWithManager(mgr); err != nil {
@@ -107,6 +108,9 @@ func run() error {
 
 	log.Println("Initialized controller manager")
 
+	// Channel for internal errors that should trigger shutdown
+	errChan := make(chan error, 1)
+
 	// Start controller manager in background
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -114,7 +118,7 @@ func run() error {
 	go func() {
 		log.Println("Starting controller manager...")
 		if err := mgr.Start(ctx); err != nil {
-			log.Fatalf("Controller manager error: %v", err)
+			errChan <- fmt.Errorf("controller manager error: %w", err)
 		}
 	}()
 
@@ -145,19 +149,26 @@ func run() error {
 		log.Println("UI not found - API only mode")
 	}
 
+	// Channel for shutdown signals
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
 	// Start server
 	go func() {
 		addr := cfg.GetServerAddr()
 		log.Printf("Server listening on %s", addr)
 		if err := e.Start(addr); err != nil {
-			log.Printf("Server error: %v", err)
+			errChan <- fmt.Errorf("server error: %w", err)
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
+	// Wait for shutdown signal or error
+	select {
+	case <-quit:
+		log.Println("Received shutdown signal")
+	case err := <-errChan:
+		log.Printf("Internal error: %v", err)
+	}
 
 	log.Println("Shutting down server...")
 

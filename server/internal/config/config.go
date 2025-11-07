@@ -25,6 +25,7 @@ type Config struct {
 	KubeConfig           string // Path to kubeconfig (empty means in-cluster)
 	DefaultIngressClass  string
 	DefaultIngressDomain string
+	CertManagerIssuer    string // cert-manager ClusterIssuer name for TLS
 
 	// Supabase Helm chart configuration
 	SupabaseChartRepo    string
@@ -49,6 +50,7 @@ func Load() (*Config, error) {
 		KubeConfig:           getEnv("KUBECONFIG", ""),
 		DefaultIngressClass:  getEnv("DEFAULT_INGRESS_CLASS", "nginx"),
 		DefaultIngressDomain: getEnv("DEFAULT_INGRESS_DOMAIN", "supabase.example.com"),
+		CertManagerIssuer:    getEnv("CERT_MANAGER_ISSUER", "letsencrypt-prod"),
 
 		SupabaseChartRepo:    getEnv("SUPABASE_CHART_REPO", "https://supabase-community.github.io/supabase-kubernetes"),
 		SupabaseChartName:    getEnv("SUPABASE_CHART_NAME", "supabase"),

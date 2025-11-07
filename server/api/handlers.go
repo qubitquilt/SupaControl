@@ -346,6 +346,11 @@ func (h *Handler) convertCRToAPIType(cr *supacontrolv1alpha1.SupabaseInstance) *
 	case supacontrolv1alpha1.PhaseFailed:
 		status = apitypes.StatusFailed
 	default:
+		// Unknown phase - log warning and default to Provisioning
+		slog.Warn("Unknown SupabaseInstance phase encountered",
+			"projectName", cr.Spec.ProjectName,
+			"phase", cr.Status.Phase,
+			"defaulting_to", apitypes.StatusProvisioning)
 		status = apitypes.StatusProvisioning
 	}
 

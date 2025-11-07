@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"helm.sh/helm/v3/pkg/action"
@@ -11,6 +10,7 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,14 +38,16 @@ type SupabaseInstanceReconciler struct {
 	ChartVersion         string
 	DefaultIngressClass  string
 	DefaultIngressDomain string
+	CertManagerIssuer    string
 }
 
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is the main reconciliation loop
 func (r *SupabaseInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -262,7 +264,7 @@ func (r *SupabaseInstanceReconciler) cleanup(ctx context.Context, instance *supa
 
 	// Uninstall Helm release
 	if releaseName != "" && namespace != "" {
-		if err := r.uninstallHelmChart(namespace, releaseName); err != nil {
+		if err := r.uninstallHelmChart(ctx, namespace, releaseName); err != nil {
 			logger.Error(err, "Failed to uninstall Helm chart (non-fatal)")
 		}
 	}
@@ -315,6 +317,93 @@ func (r *SupabaseInstanceReconciler) ensureNamespace(ctx context.Context, instan
 		Reason:             "NamespaceCreated",
 		Message:            "Namespace created successfully",
 	})
+
+	// Create namespace-scoped RBAC for least privilege
+	if err := r.ensureNamespaceRBAC(ctx, instance); err != nil {
+		return fmt.Errorf("failed to create namespace RBAC: %w", err)
+	}
+
+	return nil
+}
+
+// ensureNamespaceRBAC creates namespace-scoped Role and RoleBinding for the controller
+// This implements least privilege by granting permissions only within the instance namespace
+func (r *SupabaseInstanceReconciler) ensureNamespaceRBAC(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+	logger := ctrl.LoggerFrom(ctx)
+	namespace := instance.Status.Namespace
+
+	// Create Role with namespace-scoped permissions
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "supacontrol-instance-manager",
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "supacontrol",
+				"supacontrol.io/instance":      instance.Spec.ProjectName,
+			},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "configmaps"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services", "pods"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"ingresses"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+		},
+	}
+
+	if err := r.Create(ctx, role); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			logger.Info("Namespace Role already exists", "namespace", namespace)
+		} else {
+			return err
+		}
+	} else {
+		logger.Info("Created namespace Role", "namespace", namespace)
+	}
+
+	// Create RoleBinding
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "supacontrol-instance-manager",
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "supacontrol",
+				"supacontrol.io/instance":      instance.Spec.ProjectName,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "supacontrol-instance-manager",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "supacontrol-controller",
+				Namespace: "supacontrol-system",
+			},
+		},
+	}
+
+	if err := r.Create(ctx, roleBinding); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			logger.Info("Namespace RoleBinding already exists", "namespace", namespace)
+		} else {
+			return err
+		}
+	} else {
+		logger.Info("Created namespace RoleBinding", "namespace", namespace)
+	}
 
 	return nil
 }
@@ -554,7 +643,7 @@ func (r *SupabaseInstanceReconciler) createIngress(ctx context.Context, namespac
 		"supacontrol.io/instance":      instance.Spec.ProjectName,
 	}
 	ingress.Annotations = map[string]string{
-		"cert-manager.io/cluster-issuer": "letsencrypt-prod",
+		"cert-manager.io/cluster-issuer": r.CertManagerIssuer,
 	}
 	ingress.Spec = networkingv1.IngressSpec{
 		IngressClassName: &ingressClass,
@@ -600,12 +689,15 @@ func (r *SupabaseInstanceReconciler) createIngress(ctx context.Context, namespac
 }
 
 // uninstallHelmChart removes the Helm release
-func (r *SupabaseInstanceReconciler) uninstallHelmChart(namespace, releaseName string) error {
+func (r *SupabaseInstanceReconciler) uninstallHelmChart(ctx context.Context, namespace, releaseName string) error {
+	logger := ctrl.LoggerFrom(ctx)
 	settings := cli.New()
 	settings.SetNamespace(namespace)
 
 	actionConfig := new(action.Configuration)
-	if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", log.Printf); err != nil {
+	if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", func(format string, v ...interface{}) {
+		logger.Info(fmt.Sprintf(format, v...))
+	}); err != nil {
 		return fmt.Errorf("failed to initialize helm action config: %w", err)
 	}
 
