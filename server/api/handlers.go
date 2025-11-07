@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -257,7 +258,7 @@ func (h *Handler) provisionInstance(projectName string) {
 		// Update instance status to FAILED
 		errMsg := err.Error()
 		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			fmt.Printf("Failed to update instance status: %v\n", updateErr)
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
 		}
 		return
 	}
@@ -266,7 +267,7 @@ func (h *Handler) provisionInstance(projectName string) {
 	if err := h.dbClient.UpdateInstance(instance); err != nil {
 		errMsg := err.Error()
 		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			fmt.Printf("Failed to update instance status: %v\n", updateErr)
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
 		}
 		return
 	}
@@ -338,7 +339,7 @@ func (h *Handler) deleteInstance(projectName, namespace string) {
 		// Update instance status to FAILED
 		errMsg := fmt.Sprintf("failed to delete: %v", err)
 		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			fmt.Printf("Failed to update instance status: %v\n", updateErr)
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
 		}
 		return
 	}
@@ -347,7 +348,7 @@ func (h *Handler) deleteInstance(projectName, namespace string) {
 	if err := h.dbClient.DeleteInstance(projectName); err != nil {
 		errMsg := fmt.Sprintf("failed to remove from database: %v", err)
 		if updateErr := h.dbClient.UpdateInstanceStatus(projectName, apitypes.StatusFailed, &errMsg); updateErr != nil {
-			fmt.Printf("Failed to update instance status: %v\n", updateErr)
+			slog.Error("Failed to update instance status", "project", projectName, "error", updateErr)
 		}
 		return
 	}

@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -82,7 +83,7 @@ func (c *Client) WithinTransaction(fn func(*sqlx.Tx) error) error {
 	defer func() {
 		if p := recover(); p != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				fmt.Printf("Failed to rollback transaction during panic: %v\n", rbErr)
+				slog.Error("Failed to rollback transaction during panic", "error", rbErr)
 			}
 			panic(p)
 		}

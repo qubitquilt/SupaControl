@@ -15,8 +15,13 @@ coverage:
     - "ui/src/test/**"
     - "**/*.test.js"
     - "**/*.test.jsx"
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
     - "**/*.config.js"
-    - "cli/**"
+    - "**/*.config.ts"
+    - "cli/src/cli.tsx"
+    - "cli/src/components/Welcome.tsx"
+    - "cli/src/components/Complete.tsx"
 
 comment:
   layout: "reach, diff, flags, files"
@@ -32,4 +37,9 @@ flags:
   frontend:
     paths:
       - ui/src/
+    carryforward: true
+
+  cli:
+    paths:
+      - cli/src/
     carryforward: true

@@ -7,6 +7,10 @@ import { ConfigurationWizard, Configuration } from './components/ConfigurationWi
 import { Installation } from './components/Installation.js';
 import { Complete } from './components/Complete.js';
 
+// Timing constants for transitions and delays
+const SUCCESS_TRANSITION_DELAY_MS = 1500;
+const ERROR_EXIT_DELAY_MS = 3000;
+
 type Screen = 'welcome' | 'prerequisites' | 'configuration' | 'installation' | 'complete';
 
 const App: React.FC = () => {
@@ -25,9 +29,9 @@ const App: React.FC = () => {
   const handlePrerequisitesComplete = (success: boolean) => {
     setPrerequisitesPassed(success);
     if (success) {
-      setTimeout(() => setScreen('configuration'), 1500);
+      setTimeout(() => setScreen('configuration'), SUCCESS_TRANSITION_DELAY_MS);
     } else {
-      setTimeout(() => process.exit(1), 3000);
+      setTimeout(() => process.exit(1), ERROR_EXIT_DELAY_MS);
     }
   };
 

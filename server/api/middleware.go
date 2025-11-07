@@ -1,7 +1,7 @@
 package api
 
 import (
-	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -76,7 +76,7 @@ func authenticateAPIKey(c echo.Context, next echo.HandlerFunc, authService *auth
 	// Update last used timestamp (async, don't wait)
 	go func() {
 		if err := dbClient.UpdateAPIKeyLastUsed(apiKeyRecord.ID); err != nil {
-			fmt.Printf("Failed to update API key last used timestamp: %v\n", err)
+			slog.Error("Failed to update API key last used timestamp", "api_key_id", apiKeyRecord.ID, "error", err)
 		}
 	}()
 

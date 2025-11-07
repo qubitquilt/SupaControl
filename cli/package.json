@@ -9,7 +9,10 @@
     "start": "node --loader tsx src/cli.tsx",
     "dev": "node --loader tsx --watch src/cli.tsx",
     "build": "esbuild src/cli.tsx --bundle --platform=node --target=node18 --outfile=dist/cli.js --banner:js='#!/usr/bin/env node' --external:react --external:ink --external:ink-*",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "supacontrol",
@@ -32,16 +35,17 @@
     "chalk": "^5.3.0",
     "yaml": "^2.3.4",
     "execa": "^8.0.1",
-    "crypto": "^1.0.1",
     "ora": "^7.0.1",
     "nanoid": "^5.0.4"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
     "@types/react": "^18.2.46",
+    "@vitest/coverage-v8": "^1.1.0",
     "esbuild": "^0.19.11",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
   },
   "engines": {
     "node": ">=18.0.0"

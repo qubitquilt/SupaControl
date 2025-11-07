@@ -3,8 +3,10 @@ import { Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { Configuration } from './ConfigurationWizard.js';
 import { saveHelmValues, installHelm, checkHelmRelease } from '../utils/helm.js';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { homedir } from 'os';
+import { access, constants } from 'fs/promises';
+import { execa } from 'execa';
 
 interface InstallationProps {
   config: Configuration;
@@ -29,11 +31,53 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
     { step: 'verify', message: 'Verifying installation', status: 'pending' },
   ]);
   const [valuesPath, setValuesPath] = useState<string>('');
+  const [chartPath, setChartPath] = useState<string>('');
 
   const updateStep = (step: InstallStep, status: StepStatus['status'], error?: string) => {
     setSteps((prev) =>
       prev.map((s) => (s.step === step ? { ...s, status, error } : s))
     );
+  };
+
+  // Determine the chart path
+  const getChartPath = async (): Promise<string> => {
+    // First, check environment variable
+    const envChartPath = process.env.SUPACONTROL_CHART_PATH;
+    if (envChartPath) {
+      try {
+        await access(envChartPath, constants.R_OK);
+        return envChartPath;
+      } catch {
+        // Environment path doesn't exist, continue to other options
+      }
+    }
+
+    // Check if running from repository root
+    const localChartPath = resolve(process.cwd(), 'charts/supacontrol');
+    try {
+      await access(localChartPath, constants.R_OK);
+      return localChartPath;
+    } catch {
+      // Local path doesn't exist
+    }
+
+    // Check common parent directory (if CLI is in cli/ subdirectory)
+    const parentChartPath = resolve(process.cwd(), '../charts/supacontrol');
+    try {
+      await access(parentChartPath, constants.R_OK);
+      return parentChartPath;
+    } catch {
+      // Parent path doesn't exist
+    }
+
+    // Clone repository to temporary directory
+    const tmpDir = join(homedir(), '.supacontrol', 'repo');
+    try {
+      await execa('git', ['clone', '--depth', '1', 'https://github.com/qubitquilt/SupaControl.git', tmpDir]);
+      return join(tmpDir, 'charts/supacontrol');
+    } catch (error: any) {
+      throw new Error(`Failed to locate or clone Helm chart. Please set SUPACONTROL_CHART_PATH environment variable or run from the repository root. Error: ${error.message}`);
+    }
   };
 
   useEffect(() => {
@@ -49,6 +93,11 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
         setCurrentStep('values');
         updateStep('values', 'running');
         const outputDir = join(homedir(), '.supacontrol');
+
+        // Determine chart path
+        const resolvedChartPath = await getChartPath();
+        setChartPath(resolvedChartPath);
+
         const helmConfig = {
           jwtSecret: config.jwtSecret,
           dbPassword: config.dbPassword,
@@ -58,6 +107,7 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
           ingressClass: config.ingressClass,
           ingressDomain: config.ingressDomain,
           tlsEnabled: config.tlsEnabled,
+          certManagerIssuer: config.certManagerIssuer,
         };
         const savedPath = await saveHelmValues(helmConfig, outputDir);
         setValuesPath(savedPath);
@@ -67,12 +117,11 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
         setCurrentStep('install');
         updateStep('install', 'running');
 
-        const chartPath = './charts/supacontrol';
         const result = await installHelm(
           config.namespace,
           config.releaseName,
           savedPath,
-          chartPath
+          resolvedChartPath
         );
 
         if (!result.success) {

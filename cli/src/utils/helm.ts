@@ -15,6 +15,7 @@ export interface HelmConfig {
   ingressClass?: string;
   ingressDomain?: string;
   tlsEnabled: boolean;
+  certManagerIssuer?: string;
   replicas?: number;
   imageTag?: string;
 }
@@ -61,9 +62,9 @@ export function generateHelmValues(config: HelmConfig): string {
     values.ingress = {
       enabled: true,
       className: config.ingressClass || 'nginx',
-      annotations: {
-        'cert-manager.io/cluster-issuer': 'letsencrypt-prod',
-      },
+      annotations: config.tlsEnabled && config.certManagerIssuer ? {
+        'cert-manager.io/cluster-issuer': config.certManagerIssuer,
+      } : {},
       hosts: [
         {
           host: config.ingressHost,

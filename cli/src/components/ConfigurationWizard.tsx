@@ -15,6 +15,7 @@ export interface Configuration {
   installDatabase: boolean;
   dbHost?: string;
   tlsEnabled: boolean;
+  certManagerIssuer?: string;
 }
 
 interface ConfigurationWizardProps {
@@ -28,6 +29,7 @@ type Step =
   | 'ingressDomain'
   | 'ingressClass'
   | 'tlsEnabled'
+  | 'certManagerIssuer'
   | 'installDatabase'
   | 'dbHost'
   | 'secrets'
@@ -42,6 +44,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
     ingressDomain: 'supabase.example.com',
     installDatabase: true,
     tlsEnabled: true,
+    certManagerIssuer: 'letsencrypt-prod',
   });
 
   const handleInput = (field: keyof Configuration, value: any) => {
@@ -56,6 +59,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
       'ingressDomain',
       'ingressClass',
       'tlsEnabled',
+      ...(config.tlsEnabled === true ? ['certManagerIssuer' as Step] : []),
       'installDatabase',
       ...(config.installDatabase === false ? ['dbHost' as Step] : []),
       'secrets',
@@ -184,6 +188,22 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
         </Box>
       )}
 
+      {step === 'certManagerIssuer' && (
+        <Box flexDirection="column">
+          <Text>Enter cert-manager ClusterIssuer name:</Text>
+          <Text dimColor>(default: letsencrypt-prod)</Text>
+          <Box marginTop={1}>
+            <Text color="green">➜ </Text>
+            <TextInput
+              value={config.certManagerIssuer || ''}
+              onChange={(value) => handleInput('certManagerIssuer', value)}
+              onSubmit={nextStep}
+              placeholder="letsencrypt-prod"
+            />
+          </Box>
+        </Box>
+      )}
+
       {step === 'installDatabase' && (
         <Box flexDirection="column">
           <Text>Install PostgreSQL database with SupaControl?</Text>
@@ -265,6 +285,12 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
               <Text color="gray">TLS Enabled: </Text>
               <Text bold color={config.tlsEnabled ? 'green' : 'yellow'}>{config.tlsEnabled ? 'Yes' : 'No'}</Text>
             </Text>
+            {config.tlsEnabled && (
+              <Text>
+                <Text color="gray">Cert Manager Issuer: </Text>
+                <Text bold>{config.certManagerIssuer}</Text>
+              </Text>
+            )}
             <Text>
               <Text color="gray">Database: </Text>
               <Text bold>
