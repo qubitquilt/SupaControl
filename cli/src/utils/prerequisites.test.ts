@@ -33,16 +33,16 @@ describe('prerequisites utilities', () => {
     });
 
     it('should correctly identify missing prerequisites', async () => {
-      (vi.mocked(execa).mockImplementation as any)(async (file: string, args?: string[] | any) => {
+      vi.mocked(execa).mockImplementation((async (file: string, args?: string[] | any) => {
         if (file === 'kubectl' || file === 'helm') {
           return {
             stdout: 'v1.28.0',
             stderr: '',
             exitCode: 0,
-          };
+          } as any;
         }
         throw new Error('Command not found');
-      });
+      }) as any);
 
       const results = await checkPrerequisites();
 

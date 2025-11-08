@@ -9,7 +9,7 @@
   "scripts": {
     "start": "tsx src/cli.tsx",
     "dev": "node --import tsx --watch src/cli.tsx",
-    "build": "esbuild src/cli.tsx --bundle --platform=node --target=node18.19 --outfile=dist/cli.js --external:react --external:ink --external:ink-*",
+    "build": "esbuild src/cli.tsx --bundle --platform=node --target=node18.19 --outfile=dist/cli.js --external:react --external:ink --external:ink-* --banner:js='#!/usr/bin/env node'",
     "prepublishOnly": "npm run build",
     "postinstall": "patch-package",
     "test": "vitest run",
