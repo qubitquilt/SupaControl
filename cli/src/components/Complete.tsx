@@ -45,9 +45,11 @@ export const Complete: React.FC<CompleteProps> = ({ config, success }) => {
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan">
-          📍 Access Information:
-        </Text>
+        <Box marginTop={1}>
+          <Text bold color="cyan">
+            📍 Access Information:
+          </Text>
+        </Box>
         <Box marginTop={1} flexDirection="column" paddingX={2}>
           <Text>
             <Text color="gray">Dashboard URL: </Text>
@@ -67,9 +69,11 @@ export const Complete: React.FC<CompleteProps> = ({ config, success }) => {
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="yellow">
-          🔐 Default Credentials:
-        </Text>
+        <Box marginTop={1}>
+          <Text bold color="yellow">
+            🔐 Default Credentials:
+          </Text>
+        </Box>
         <Box marginTop={1} flexDirection="column" paddingX={2}>
           <Text>
             <Text color="gray">Username: </Text>
@@ -79,24 +83,36 @@ export const Complete: React.FC<CompleteProps> = ({ config, success }) => {
             <Text color="gray">Password: </Text>
             <Text bold>admin</Text>
           </Text>
-          <Text color="red" bold marginTop={1}>
-            ⚠️  IMPORTANT: Change the default password immediately after first login!
-          </Text>
+          <Box marginTop={1}>
+            <Text color="red" bold>
+              ⚠️  IMPORTANT: Change the default password immediately after first login!
+            </Text>
+          </Box>
         </Box>
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan">
-          🚀 Next Steps:
-        </Text>
+        <Box marginTop={1}>
+          <Text bold color="cyan">
+            🚀 Next Steps:
+          </Text>
+        </Box>
         <Box marginTop={1} flexDirection="column" paddingX={2}>
           <Text>1. Wait for all pods to be ready:</Text>
           <Text dimColor>   kubectl get pods -n {config.namespace} --watch</Text>
-          <Text marginTop={1}>2. Access the dashboard:</Text>
+          <Box marginTop={1}>
+            <Text>2. Access the dashboard:</Text>
+          </Box>
           <Text dimColor>   {dashboardUrl}</Text>
-          <Text marginTop={1}>3. Login with default credentials and change password</Text>
-          <Text marginTop={1}>4. Generate an API key in Settings for CLI access</Text>
-          <Text marginTop={1}>5. Create your first Supabase instance!</Text>
+          <Box marginTop={1}>
+            <Text>3. Login with default credentials and change password</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text>4. Generate an API key in Settings for CLI access</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text>5. Create your first Supabase instance!</Text>
+          </Box>
         </Box>
       </Box>
 
@@ -108,14 +124,18 @@ export const Complete: React.FC<CompleteProps> = ({ config, success }) => {
           <Text>
             TLS is enabled with cert-manager. Make sure cert-manager is installed and configured in your cluster.
           </Text>
-          <Text dimColor marginTop={1}>
-            If cert-manager is not installed, the dashboard may not be accessible via HTTPS immediately.
-          </Text>
+          <Box marginTop={1}>
+            <Text dimColor >
+              If cert-manager is not installed, the dashboard may not be accessible via HTTPS immediately.
+            </Text>
+          </Box>
         </Box>
       )}
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold>Useful Commands:</Text>
+        <Box marginTop={1}>
+          <Text bold>Useful Commands:</Text>
+        </Box>
         <Box marginTop={1} flexDirection="column" paddingX={2}>
           <Text dimColor>• View logs: kubectl logs -n {config.namespace} -l app.kubernetes.io/name=supacontrol -f</Text>
           <Text dimColor>• Check status: helm status {config.releaseName} -n {config.namespace}</Text>

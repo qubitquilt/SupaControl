@@ -7,8 +7,8 @@ import {
   installHelm,
   upgradeHelm,
   checkHelmRelease,
-} from './helm';
-import type { HelmConfig } from './helm';
+} from './helm.js';
+import type { HelmConfig } from './helm.js';
 
 // Mock dependencies
 vi.mock('execa');

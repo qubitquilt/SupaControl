@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { execa } from 'execa';
+import { execa, type ExecaChildProcess } from 'execa';
 import {
   checkPrerequisites,
   checkKubernetesConnection,
   getKubernetesNamespaces,
-} from './prerequisites';
+} from './prerequisites.js';
 
 // Mock execa
 vi.mock('execa');
@@ -33,16 +33,16 @@ describe('prerequisites utilities', () => {
     });
 
     it('should correctly identify missing prerequisites', async () => {
-      vi.mocked(execa).mockImplementation((command: string) => {
-        if (command === 'kubectl' || command === 'helm') {
-          return Promise.resolve({
+      vi.mocked(execa).mockImplementation((async (file: string, args?: string[] | any) => {
+        if (file === 'kubectl' || file === 'helm') {
+          return {
             stdout: 'v1.28.0',
             stderr: '',
             exitCode: 0,
-          } as any);
+          } as any;
         }
-        return Promise.reject(new Error('Command not found'));
-      });
+        throw new Error('Command not found');
+      }) as any);
 
       const results = await checkPrerequisites();
 
