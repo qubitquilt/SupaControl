@@ -88,7 +88,7 @@ postgresql:
   image:
     registry: docker.io
     repository: bitnami/postgresql
-    tag: "14"  # Use stable version
+    tag: "14.11.0"  # Use specific stable version
   auth:
     username: supacontrol
     password: "pPjvyAIPj^N6podkgRho!A4LDW3DSdnG"
