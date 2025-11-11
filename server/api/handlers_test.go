@@ -22,15 +22,15 @@ import (
 
 // mockDBClient is a mock implementation of DBClient for testing
 type mockDBClient struct {
-	getUserByUsernameFunc       func(username string) (*db.User, error)
-	getUserByIDFunc             func(id int64) (*db.User, error)
-	createAPIKeyFunc            func(userID int64, name, keyHash string, expiresAt *time.Time) (*apitypes.APIKey, error)
-	listAPIKeysByUserFunc       func(userID int64) ([]*apitypes.APIKey, error)
-	listAllAPIKeysFunc          func() ([]*apitypes.APIKey, error)
-	getAPIKeyByIDFunc           func(id int64) (*apitypes.APIKey, error)
-	deleteAPIKeyFunc            func(id int64) error
-	getAPIKeyByHashFunc         func(keyHash string) (*apitypes.APIKey, error)
-	updateAPIKeyLastUsedFunc    func(id int64) error
+	getUserByUsernameFunc    func(username string) (*db.User, error)
+	getUserByIDFunc          func(id int64) (*db.User, error)
+	createAPIKeyFunc         func(userID int64, name, keyHash string, expiresAt *time.Time) (*apitypes.APIKey, error)
+	listAPIKeysByUserFunc    func(userID int64) ([]*apitypes.APIKey, error)
+	listAllAPIKeysFunc       func() ([]*apitypes.APIKey, error)
+	getAPIKeyByIDFunc        func(id int64) (*apitypes.APIKey, error)
+	deleteAPIKeyFunc         func(id int64) error
+	getAPIKeyByHashFunc      func(keyHash string) (*apitypes.APIKey, error)
+	updateAPIKeyLastUsedFunc func(id int64) error
 }
 
 func (m *mockDBClient) GetUserByUsername(username string) (*db.User, error) {
@@ -193,7 +193,7 @@ func TestLogin(t *testing.T) {
 			name:        "successful login",
 			requestBody: `{"username":"admin","password":"admin"}`,
 			setupMock: func(mockDB *mockDBClient, authSvc *auth.Service) {
-			 mockDB.getUserByUsernameFunc = func(username string) (*db.User, error) {
+				mockDB.getUserByUsernameFunc = func(username string) (*db.User, error) {
 					if username != "admin" {
 						return nil, nil
 					}
@@ -223,7 +223,7 @@ func TestLogin(t *testing.T) {
 			name:        "user not found",
 			requestBody: `{"username":"nonexistent","password":"admin"}`,
 			setupMock: func(mockDB *mockDBClient, authSvc *auth.Service) {
-			 mockDB.getUserByUsernameFunc = func(username string) (*db.User, error) {
+				mockDB.getUserByUsernameFunc = func(username string) (*db.User, error) {
 					return nil, nil // User not found
 				}
 			},
@@ -234,7 +234,7 @@ func TestLogin(t *testing.T) {
 			name:        "wrong password",
 			requestBody: `{"username":"admin","password":"wrongpassword"}`,
 			setupMock: func(mockDB *mockDBClient, authSvc *auth.Service) {
-			 mockDB.getUserByUsernameFunc = func(username string) (*db.User, error) {
+				mockDB.getUserByUsernameFunc = func(username string) (*db.User, error) {
 					hash, _ := authSvc.HashPassword("admin")
 					return &db.User{
 						ID:           1,
@@ -314,7 +314,7 @@ func TestGetAuthMe(t *testing.T) {
 			name:    "successful get user info",
 			setAuth: true,
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.getUserByIDFunc = func(id int64) (*db.User, error) {
+				mockDB.getUserByIDFunc = func(id int64) (*db.User, error) {
 					return &db.User{
 						ID:       1,
 						Username: "testuser",
@@ -338,7 +338,7 @@ func TestGetAuthMe(t *testing.T) {
 			name:    "user not found in database",
 			setAuth: true,
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.getUserByIDFunc = func(id int64) (*db.User, error) {
+				mockDB.getUserByIDFunc = func(id int64) (*db.User, error) {
 					return nil, nil
 				}
 			},
@@ -399,7 +399,7 @@ func TestCreateAPIKey(t *testing.T) {
 			requestBody: `{"name":"test-key"}`,
 			setAuth:     true,
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.createAPIKeyFunc = func(userID int64, name, keyHash string, expiresAt *time.Time) (*apitypes.APIKey, error) {
+				mockDB.createAPIKeyFunc = func(userID int64, name, keyHash string, expiresAt *time.Time) (*apitypes.APIKey, error) {
 					return &apitypes.APIKey{
 						ID:        1,
 						UserID:    userID,
@@ -414,18 +414,18 @@ func TestCreateAPIKey(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			name:        "not authenticated",
-			requestBody: `{"name":"test-key"}`,
-			setAuth:     false,
-			setupMock:   func(db *mockDBClient) {},
+			name:           "not authenticated",
+			requestBody:    `{"name":"test-key"}`,
+			setAuth:        false,
+			setupMock:      func(db *mockDBClient) {},
 			expectedStatus: http.StatusUnauthorized,
 			expectedError:  true,
 		},
 		{
-			name:        "invalid request body",
-			requestBody: `{invalid json}`,
-			setAuth:     true,
-			setupMock:   func(db *mockDBClient) {},
+			name:           "invalid request body",
+			requestBody:    `{invalid json}`,
+			setAuth:        true,
+			setupMock:      func(db *mockDBClient) {},
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  true,
 		},
@@ -498,7 +498,7 @@ func TestListAPIKeys(t *testing.T) {
 			setAuth:  true,
 			userRole: "user",
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.listAPIKeysByUserFunc = func(userID int64) ([]*apitypes.APIKey, error) {
+				mockDB.listAPIKeysByUserFunc = func(userID int64) ([]*apitypes.APIKey, error) {
 					return []*apitypes.APIKey{
 						{ID: 1, UserID: userID, Name: "key1"},
 						{ID: 2, UserID: userID, Name: "key2"},
@@ -598,14 +598,14 @@ func TestDeleteAPIKey(t *testing.T) {
 			setAuth:  true,
 			userRole: "user",
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
+				mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
 					return &apitypes.APIKey{
 						ID:     1,
 						UserID: 1, // Same as authenticated user
 						Name:   "test-key",
 					}, nil
 				}
-			 mockDB.deleteAPIKeyFunc = func(id int64) error {
+				mockDB.deleteAPIKeyFunc = func(id int64) error {
 					return nil
 				}
 			},
@@ -618,14 +618,14 @@ func TestDeleteAPIKey(t *testing.T) {
 			setAuth:  true,
 			userRole: "admin",
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
+				mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
 					return &apitypes.APIKey{
 						ID:     2,
 						UserID: 999, // Different user
 						Name:   "other-key",
 					}, nil
 				}
-			 mockDB.deleteAPIKeyFunc = func(id int64) error {
+				mockDB.deleteAPIKeyFunc = func(id int64) error {
 					return nil
 				}
 			},
@@ -638,7 +638,7 @@ func TestDeleteAPIKey(t *testing.T) {
 			setAuth:  true,
 			userRole: "user",
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
+				mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
 					return &apitypes.APIKey{
 						ID:     2,
 						UserID: 999, // Different user
@@ -664,7 +664,7 @@ func TestDeleteAPIKey(t *testing.T) {
 			setAuth:  true,
 			userRole: "admin",
 			setupMock: func(mockDB *mockDBClient) {
-			 mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
+				mockDB.getAPIKeyByIDFunc = func(id int64) (*apitypes.APIKey, error) {
 					return nil, nil
 				}
 			},
