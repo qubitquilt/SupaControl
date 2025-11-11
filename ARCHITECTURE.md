@@ -153,12 +153,11 @@ server/
 │   │   └── config.go       # Configuration management
 │   ├── /db
 │   │   ├── db.go           # Database connection & migrations
-│   │   ├── api_keys.go     # API key repository
-│   │   └── instances.go    # Instance repository
+│   │   └── api_keys.go     # API key repository
 │   └── /k8s
 │       ├── k8s.go          # Kubernetes client wrapper
-│       ├── orchestrator.go # Helm operations
-│       └── crclient.go     # Controller runtime client
+│       ├── orchestrator.go # Helm operations (legacy)
+│       └── crclient.go     # Controller runtime CRD client
 └── /pkg
     └── /api-types          # Shared API types
 ```
@@ -231,9 +230,11 @@ func (h *Handler) CreateInstance(c echo.Context) error {
 
 #### 3. Database Layer (`server/internal/db/`)
 
-**Responsibility**: Data persistence and retrieval
+**Responsibility**: SupaControl operational data persistence (NOT instance state)
 
 **Technology**: PostgreSQL + sqlx (prepared statements)
+
+**Important**: Per ADR-001, instance state is stored in Kubernetes CRDs, not PostgreSQL.
 
 **Schema Design**:
 
@@ -256,23 +257,16 @@ CREATE TABLE api_keys (
     revoked_at TIMESTAMP NULL
 );
 
--- instances table
-CREATE TABLE instances (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) UNIQUE NOT NULL,
-    namespace VARCHAR(255) NOT NULL,
-    status VARCHAR(50),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    deleted_at TIMESTAMP NULL
-);
+-- Note: Instance state is NOT stored in PostgreSQL
+-- Per ADR-001, SupabaseInstance CRDs are the Single Source of Truth for instance state
+-- PostgreSQL is used only for SupaControl's own state (users, API keys, audit logs)
 ```
 
 **Repository Pattern**:
-- Each entity has a repository file
+- Each entity has a repository file (users, api_keys)
 - CRUD operations encapsulated
 - Database transactions where needed
-- Soft deletes for instances
+- Prepared statements via sqlx (SQL injection prevention)
 
 **Migrations**:
 - Located in `server/internal/db/migrations/`
@@ -360,27 +354,38 @@ ui/
       │ 2. Extract user from JWT
       ▼
 ┌──────────────────┐
-│  Orchestrator    │
+│  API Handler     │
 │  CreateInstance  │
 └─────┬────────────┘
       │
-      ├─────► 3. Check DB: instance exists?
-      │       └─[Database Repository]
+      ├─────► 3. Check if CRD exists
+      │       └─[Kubernetes CRClient]
       │
-      ├─────► 4. Create namespace
+      └─────► 4. Create SupabaseInstance CRD
+              └─[Kubernetes CRClient]
+
+┌──────────────────┐
+│   Controller     │
+│  (watches CRDs)  │
+└─────┬────────────┘
+      │
+      ├─────► 5. Create namespace
       │       └─[Kubernetes API]
       │
-      ├─────► 5. Install Helm chart
+      ├─────► 6. Create secrets
+      │       └─[Kubernetes API]
+      │
+      ├─────► 7. Install Helm chart
       │       └─[Helm SDK]
       │
-      └─────► 6. Save instance record
-              └─[Database Repository]
+      └─────► 8. Update CRD status
+              └─[Kubernetes API]
 
 Success path:
-  Database ──► Return instance ──► API ──► Client (201 Created)
+  Controller updates CRD status ──► API reads CRD ──► Client (201 Accepted)
 
 Error path:
-  Any step ──► Rollback (delete namespace) ──► API ──► Client (500 Error)
+  Controller sets status.phase=Failed ──► API reads CRD ──► Client sees error
 ```
 
 #### Authentication Flow
@@ -438,30 +443,38 @@ Subsequent Requests:
 │ id (PK)         │
 │ username        │
 │ password_hash   │
+│ role            │
 │ created_at      │
+│ updated_at      │
 └────────┬────────┘
          │
          │ 1:N
          │
          ▼
-┌─────────────────┐         ┌─────────────────┐
-│    api_keys     │         │    instances    │
-├─────────────────┤         ├─────────────────┤
-│ id (PK)         │         │ id (PK)         │
-│ name            │         │ name (unique)   │
-│ key_hash        │         │ namespace       │
-│ user_id (FK)    │         │ status          │
-│ created_at      │         │ created_at      │
-│ revoked_at      │         │ updated_at      │
-└─────────────────┘         │ deleted_at      │
-                            └─────────────────┘
+┌─────────────────┐
+│    api_keys     │
+├─────────────────┤
+│ id (PK)         │
+│ name            │
+│ key_hash        │
+│ user_id (FK)    │
+│ created_at      │
+│ expires_at      │
+│ last_used       │
+└─────────────────┘
 
-Notes:
+PostgreSQL Database Schema Notes:
 - users.password_hash: bcrypt hashed passwords
+- users.role: User role (admin, user, etc.)
 - api_keys.key_hash: SHA-256 hashed API keys
-- api_keys.revoked_at: NULL = active, timestamp = revoked
-- instances.deleted_at: NULL = active (soft delete pattern)
-- instances.status: Pending, Running, Failed, Deleting
+- api_keys.expires_at: NULL = never expires, timestamp = expiration date
+- api_keys.last_used: Tracks last usage for auditing
+
+Instance State (NOT in PostgreSQL):
+- Instance metadata stored in Kubernetes as SupabaseInstance CRDs
+- See ADR-001: docs/adr/001-crd-as-single-source-of-truth.md
+- Query instances via: kubectl get supabaseinstances -A
+- Instance fields: projectName, namespace, status, studioURL, apiURL, errorMessage, etc.
 ```
 
 ### State Management
@@ -471,14 +484,15 @@ Notes:
 **Persistent State**:
 1. **User accounts**: PostgreSQL (users table)
 2. **API keys**: PostgreSQL (api_keys table)
-3. **Instance metadata**: PostgreSQL (instances table)
-4. **Kubernetes resources**: Kubernetes API (declarative)
+3. **Instance state**: Kubernetes CRDs (SupabaseInstance custom resources) - **Single Source of Truth per ADR-001**
+4. **Kubernetes resources**: Kubernetes API (namespaces, secrets, ingresses, etc.)
 5. **Helm releases**: Helm storage (in-cluster secrets)
 
-**State Synchronization**:
-- Database is source of truth for business state
-- Kubernetes is source of truth for deployment state
-- Reconciliation happens on GET requests (status checks)
+**State Management Architecture** (per ADR-001):
+- **SupabaseInstance CRDs** are the Single Source of Truth for all instance state (status, URLs, namespaces, errors)
+- **PostgreSQL** stores only SupaControl's operational state (users, API keys, future audit logs)
+- **No state synchronization needed** - one source of truth eliminates sync complexity
+- **Controller reconciliation** maintains desired state via Kubernetes reconciliation loops
 
 ## API Design
 
@@ -1024,20 +1038,26 @@ postgresql:
 - Complexity of supporting two auth methods
 - API keys require storage and revocation management
 
-### Decision 5: Soft Deletes for Instances
+### Decision 5: CRD as Single Source of Truth (ADR-001)
 
-**Context**: Instance deletion and potential data recovery
+**Context**: Need to store and manage instance state reliably
 
-**Decision**: Soft delete instances (mark as deleted, don't remove from DB)
+**Decision**: Use Kubernetes SupabaseInstance CRDs as the Single Source of Truth for all instance state, not PostgreSQL
 
 **Rationale**:
-- Audit trail (know what instances existed)
-- Potential for "undelete" feature (future)
-- Compliance and reporting
+- Kubernetes-native architecture (operator pattern)
+- Declarative state management with built-in versioning
+- No state synchronization complexity
+- Leverages K8s API features (metadata, status, conditions, finalizers)
+- Source of truth lives where instances run
+- GitOps-ready for declarative deployments
 
 **Tradeoffs**:
-- Database growth over time
-- Need for cleanup/archival strategy (future)
+- Cannot query instance state without K8s API access (acceptable - this IS a K8s control plane)
+- No complex SQL queries (client-side filtering sufficient for current scale)
+- Must include CRDs in K8s cluster backups
+
+**Reference**: See `docs/adr/001-crd-as-single-source-of-truth.md` for full details
 
 ## Future Architecture
 
