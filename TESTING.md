@@ -2,6 +2,15 @@
 
 This document provides comprehensive information about testing SupaControl.
 
+## Current Status ⚠️
+
+**IMPORTANT**: As of November 2024, SupaControl has low test coverage:
+- **Server (Go)**: 6.3% coverage
+- **UI (React)**: 5.87% coverage
+- **CLI (TypeScript)**: Limited utility testing, component tests needed
+
+The 70% coverage goals below are aspirational and not yet achieved.
+
 ## Overview
 
 SupaControl uses a multi-layered testing strategy:
@@ -13,11 +22,21 @@ SupaControl uses a multi-layered testing strategy:
 
 ## Test Coverage Goals
 
-We aim for the following coverage targets:
+**Current Reality (November 2024)**:
+- **Server (Go)**: 6.3% coverage (goal: 70%+)
+- **Frontend (React)**: 5.87% coverage (goal: 70%+)
+- **CLI (TypeScript)**: Utility functions tested, components need coverage
 
+**Target Goals** (to be achieved):
 - **Backend (Go)**: 70%+ coverage
 - **Frontend (React)**: 70%+ coverage
 - **Critical Paths**: 90%+ coverage (auth, orchestration, API)
+
+**Priority Areas for Testing**:
+1. API handlers (currently 0% coverage)
+2. React UI components (currently 0% coverage)
+3. Database operations (currently 0% coverage)
+4. Kubernetes controller (currently 0% coverage)
 
 ## Running Tests
 
@@ -34,7 +53,31 @@ make test-coverage
 make ci
 ```
 
+### Individual Component Testing
+
+```bash
+# Server tests only
+cd server && go test -v ./...
+
+# UI tests only
+cd ui && npm test
+
+# CLI tests only (currently failing due to implementation mismatches)
+cd cli && npm test
+```
+
 ## Backend Testing (Go)
+
+### Current Test Coverage
+
+```
+server/internal/auth     - 74.5% coverage ✅
+server/internal/config   - 55.0% coverage ⚠️
+server/internal/k8s      - 2.9% coverage ❌
+server/api              - 0.0% coverage ❌
+server/controllers      - 0.0% coverage ❌
+server/internal/db      - 0.0% coverage ❌
+```
 
 ### Structure
 
@@ -42,14 +85,27 @@ make ci
 server/
 ├── internal/
 │   ├── auth/
-│   │   ├── auth.go
+│   │   ├── auth.go         (tested ✅)
 │   │   └── auth_test.go
 │   ├── config/
-│   │   ├── config.go
+│   │   ├── config.go       (tested ⚠️)
 │   │   └── config_test.go
+│   ├── db/
+│   │   ├── db.go          (untested ❌)
+│   │   ├── api_keys.go    (untested ❌)
+│   │   └── instances.go   (untested ❌)
 │   └── k8s/
-│       ├── k8s.go
+│       ├── k8s.go         (minimal testing ❌)
+│       ├── crclient.go    (untested ❌)
+│       ├── orchestrator.go (untested ❌)
 │       └── k8s_test.go
+├── api/
+│   ├── handlers.go        (untested ❌)
+│   ├── router.go          (untested ❌)
+│   └── middleware.go      (untested ❌)
+├── controllers/
+│   └── supabaseinstance_controller.go (untested ❌)
+└── main.go                (untested ❌)
 ```
 
 ### Running Backend Tests
@@ -128,20 +184,25 @@ func TestMyFunction(t *testing.T) {
 
 ### Test Categories
 
-#### Unit Tests
+#### ✅ Implemented Unit Tests
 
-Test individual functions:
-- Authentication functions (hashing, JWT generation)
-- Secret generation
-- Configuration loading
+- Authentication functions (hashing, JWT generation) - 74.5% coverage
+- Secret generation utilities - 2.9% coverage
+- Configuration loading - 55% coverage
+
+#### ❌ Missing Unit Tests
+
 - API request/response handling
+- Database operations
+- Kubernetes client operations
+- Controller reconciliation logic
 
-#### Integration Tests
+#### 🚧 Integration Tests (TODO)
 
-Test component interactions (TODO):
 - Database operations
 - API endpoint flows
 - Kubernetes client operations
+- End-to-end user workflows
 
 ### Mocking
 
@@ -163,14 +224,30 @@ func (m *MockK8sClient) CreateNamespace(ctx context.Context, name string) error 
 
 ## Frontend Testing (React)
 
+### Current Test Coverage
+
+```
+ui/src/api.js           - 78% coverage ✅
+ui/src/pages/Dashboard.jsx - 0% coverage ❌
+ui/src/pages/Login.jsx  - 0% coverage ❌
+ui/src/pages/Settings.jsx - 0% coverage ❌
+ui/src/App.jsx          - 0% coverage ❌
+ui/src/main.jsx         - 0% coverage ❌
+```
+
 ### Structure
 
 ```
 ui/
 ├── src/
-│   ├── api.js
+│   ├── api.js          (tested ✅)
 │   ├── api.test.js
-│   ├── components/
+│   ├── App.jsx         (untested ❌)
+│   ├── main.jsx        (untested ❌)
+│   ├── pages/
+│   │   ├── Dashboard.jsx (untested ❌)
+│   │   ├── Login.jsx   (untested ❌)
+│   │   └── Settings.jsx (untested ❌)
 │   └── test/
 │       └── setup.js
 └── vitest.config.js
@@ -242,6 +319,60 @@ npm run test:coverage
 open coverage/index.html
 ```
 
+## CLI Testing (TypeScript/React)
+
+### Current Status
+
+**Utilities (Tested ✅)**:
+- `cli/src/utils/helm.test.ts` - 16 tests (3 failing due to implementation mismatches)
+- `cli/src/utils/prerequisites.test.ts` - 10 tests
+- `cli/src/utils/secrets.test.ts` - 21 tests
+
+**Components (Untested ❌)**:
+- `cli/src/components/ConfigurationWizard.tsx` - 0% coverage
+- `cli/src/components/Installation.tsx` - 0% coverage
+- `cli/src/components/PrerequisitesCheck.tsx` - 0% coverage
+
+### Structure
+
+```
+cli/
+├── src/
+│   ├── cli.tsx          (excluded from coverage)
+│   ├── components/
+│   │   ├── ConfigurationWizard.tsx (untested ❌)
+│   │   ├── Installation.tsx (untested ❌)
+│   │   ├── PrerequisitesCheck.tsx (untested ❌)
+│   │   ├── Welcome.tsx   (excluded from coverage)
+│   │   └── Complete.tsx  (excluded from coverage)
+│   └── utils/
+│       ├── helm.test.ts  (tested ⚠️)
+│       ├── helm.ts       (utility functions)
+│       ├── prerequisites.test.ts (tested ✅)
+│       ├── prerequisites.ts (utility functions)
+│       ├── secrets.test.ts (tested ✅)
+│       └── secrets.ts    (utility functions)
+└── vitest.config.ts
+```
+
+### Running CLI Tests
+
+```bash
+cd cli
+
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests in watch mode
+npm test -- --watch
+```
+
 ## Continuous Integration
 
 ### GitHub Actions
@@ -309,6 +440,13 @@ View coverage: `https://codecov.io/gh/qubitquilt/SupaControl`
 4. **Test async behavior** properly with `waitFor`
 5. **Mock API calls** consistently
 
+### CLI (TypeScript/React)
+
+1. **Test component logic**, not UI rendering
+2. **Mock external commands** (helm, kubectl, git)
+3. **Test error handling** and edge cases
+4. **Use realistic test data** and scenarios
+
 ## Coverage Reports
 
 ### Viewing Coverage
@@ -327,6 +465,13 @@ go tool cover -html=coverage.out
 cd ui
 npm run test:coverage
 open coverage/index.html
+```
+
+#### CLI
+
+```bash
+cd cli
+npm run test:coverage
 ```
 
 #### Combined
@@ -352,12 +497,14 @@ Add to your README:
    ```bash
    go clean -testcache
    rm -rf ui/node_modules
+   rm -rf cli/node_modules
    ```
 
 2. **Update dependencies**:
    ```bash
    cd server && go mod download
    cd ui && npm install
+   cd cli && npm install
    ```
 
 3. **Check environment**:
@@ -365,6 +512,15 @@ Add to your README:
    go version  # Should be 1.21+
    node --version  # Should be 18+
    ```
+
+### CLI Test Issues
+
+**Current CLI Test Failures**:
+- `helm.test.ts` tests failing due to implementation mismatches
+- Tests expect different execa call signatures
+- Need to update test expectations to match current helm utility implementation
+
+**Solution**: Update test expectations in `cli/src/utils/helm.test.ts`
 
 ### CI Failures
 
@@ -375,10 +531,33 @@ Add to your README:
 
 ### Low Coverage
 
-1. **Identify uncovered lines**: View coverage report
-2. **Add tests** for critical paths first
-3. **Focus on business logic**, not boilerplate
-4. **Use coverage tools** to find gaps
+1. **Current status**: 5.87-6.3% coverage across components
+2. **Focus on critical business logic first**:
+   - API handlers and endpoints
+   - React UI components (Dashboard, Login, Settings)
+   - Database operations
+   - Kubernetes controller logic
+3. **Use coverage tools** to find gaps
+4. **Prioritize user-facing functionality**
+
+## Immediate Action Items
+
+### Phase 1: Fix Current Issues (1-2 days)
+- [ ] Fix CLI test failures in `helm.test.ts`
+- [ ] Update coverage expectations to match current reality
+- [ ] Add basic API handler tests
+
+### Phase 2: Critical Path Coverage (1-2 weeks)
+- [ ] Add React component tests (Dashboard, Login, Settings)
+- [ ] Add API endpoint tests with authentication
+- [ ] Add database operation tests
+- [ ] Add Kubernetes controller tests
+
+### Phase 3: Integration & E2E (2-3 weeks)
+- [ ] End-to-end user workflow tests
+- [ ] Integration tests between components
+- [ ] Performance and load testing
+- [ ] Security testing
 
 ## Future Improvements
 
@@ -389,6 +568,7 @@ Add to your README:
 - [ ] Security tests (SAST/DAST)
 - [ ] Contract tests for API
 - [ ] Mutation testing
+- [ ] Visual regression testing for UI
 
 ## Resources
 
@@ -399,5 +579,7 @@ Add to your README:
 - [Codecov Documentation](https://docs.codecov.com/)
 
 ---
+
+**Current Reality Check**: The project needs significant testing investment. The current 5.87% coverage indicates most business logic and user-facing functionality lacks proper test coverage. Focus on testing the most critical user journeys first.
 
 **Remember**: Good tests are the foundation of maintainable code!
