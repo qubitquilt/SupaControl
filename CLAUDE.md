@@ -24,11 +24,11 @@ This document provides guidance for AI assistants (like Claude) working with the
 ├─────────────────────────────────────────────────────────┤
 │  Web UI (React) ──► REST API (Echo/Go)                  │
 │                          │                               │
-│                    Orchestrator                          │
-│                   (K8s + Helm)                           │
+│                    Controller (K8s Operator)            │
+│                   watches SupabaseInstance CRDs         │
 │                          │                               │
-│                    Inventory DB                          │
-│                   (PostgreSQL)                           │
+│                    PostgreSQL DB                         │
+│                (Users, API Keys, Audit Logs)            │
 └─────────────────────────────────────────────────────────┘
                           │
                   Kubernetes API
@@ -37,6 +37,8 @@ This document provides guidance for AI assistants (like Claude) working with the
         │                 │                 │
    Instance1         Instance2         Instance3
    (supa-app1)      (supa-app2)      (supa-app3)
+
+Note: Instance state stored in SupabaseInstance CRDs, not PostgreSQL (ADR-001)
 ```
 
 ## Code Organization
@@ -55,12 +57,11 @@ This document provides guidance for AI assistants (like Claude) working with the
 │   │   ├── /config      # Environment configuration (55% tested)
 │   │   ├── /db          # Database layer (sqlx) - UNTESTED
 │   │   │   ├── db.go           # Connection & migrations
-│   │   │   ├── api_keys.go     # API key CRUD
-│   │   │   └── instances.go    # Instance CRUD
+│   │   │   └── api_keys.go     # API key CRUD
 │   │   └── /k8s         # K8s orchestration (2.9% tested)
 │   │       ├── k8s.go          # K8s client wrapper
-│   │       ├── orchestrator.go # Helm operations
-│   │       └── crclient.go     # Controller runtime client
+│   │       ├── orchestrator.go # Helm operations (legacy)
+│   │       └── crclient.go     # CRD client (instance CRUD)
 │   ├── main.go          # Application entry point
 │   └── go.mod           # Go dependencies
 │
@@ -132,42 +133,49 @@ This document provides guidance for AI assistants (like Claude) working with the
 
 ### 3. Database Layer (`server/internal/db/`)
 
-**Purpose**: PostgreSQL operations using sqlx
+**Purpose**: SupaControl operational data persistence (users, API keys)
+
+**IMPORTANT**: Per ADR-001, instance state is stored in Kubernetes CRDs, NOT PostgreSQL.
 
 **Files**:
 - `db.go` - Connection, migrations, health checks
 - `api_keys.go` - CRUD for API keys
-- `instances.go` - CRUD for instances
 
 **Schema**:
 ```sql
 -- users table
-id, username, password_hash, created_at
+id, username, password_hash, role, created_at, updated_at
 
 -- api_keys table
-id, name, key_hash, user_id, created_at, revoked_at
-
--- instances table
-id, name, namespace, status, created_at, updated_at, deleted_at
+id, name, key_hash, user_id, created_at, expires_at, last_used
 ```
+
+**Instance State** (NOT in PostgreSQL):
+- Stored as SupabaseInstance CRDs in Kubernetes
+- Accessed via `server/internal/k8s/crclient.go`
+- See ADR-001: `docs/adr/001-crd-as-single-source-of-truth.md`
 
 **Migrations**: Located in `server/internal/db/migrations/`, auto-applied on startup
 
 **Testing**: 0% coverage - NEEDS TESTS
 
-### 4. Kubernetes Orchestrator (`server/internal/k8s/orchestrator.go`)
+### 4. Kubernetes Controller (`server/controllers/supabaseinstance_controller.go`)
 
-**Purpose**: Helm-based Supabase instance deployment
+**Purpose**: Kubernetes operator that reconciles SupabaseInstance CRDs
 
-**Key Functions**:
-- `CreateInstance(ctx, name string) error` - Deploys Helm release
-- `DeleteInstance(ctx, name string) error` - Uninstalls Helm release
-- `GetInstanceStatus(ctx, name string) (*InstanceStatus, error)` - Checks status
-- `createNamespace(ctx, name string) error` - Creates K8s namespace
+**Architecture**:
+- API handlers create/delete SupabaseInstance CRDs (`server/api/handlers.go` uses `crClient`)
+- Controller watches CRDs and reconciles desired state
+- Controller manages namespace, secrets, Helm releases, ingresses
+
+**Reconciliation Phases**:
+- `Pending` → `Provisioning` → `Running` (success path)
+- Any phase → `Failed` (error path)
+- `Deleting` (cleanup with finalizer)
 
 **Pattern**: Each instance gets its own namespace `supa-{name}`
 
-**Testing**: 2.9% coverage - NEEDS TESTS
+**Testing**: 0% coverage - NEEDS TESTS (use controller-runtime envtest)
 
 ### 5. React Dashboard (`ui/src/pages/Dashboard.jsx`)
 
