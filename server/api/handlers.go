@@ -13,8 +13,6 @@ import (
 	apitypes "github.com/qubitquilt/supacontrol/pkg/api-types"
 	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	"github.com/qubitquilt/supacontrol/server/internal/auth"
-	"github.com/qubitquilt/supacontrol/server/internal/db"
-	"github.com/qubitquilt/supacontrol/server/internal/k8s"
 )
 
 // Handler holds dependencies for API handlers
