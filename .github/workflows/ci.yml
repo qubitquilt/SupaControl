@@ -35,6 +35,11 @@ jobs:
         go mod download
         go mod tidy
 
+    - name: Install envtest binaries for controller tests
+      run: |
+        go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+        echo "KUBEBUILDER_ASSETS=$(setup-envtest use -p path 1.28.x)" >> $GITHUB_ENV
+
     - name: Run tests with coverage
       run: |
         cd server
