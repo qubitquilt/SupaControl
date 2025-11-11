@@ -42,8 +42,8 @@ jobs:
 
     - name: Set up envtest environment
       run: |
-        setup-envtest use 1.28.x --print-path
-        echo "KUBEBUILDER_ASSETS=$(setup-envtest use 1.28.x --print-path)" >> $GITHUB_ENV
+        setup-envtest use 1.28.x -p path
+        echo "KUBEBUILDER_ASSETS=$(setup-envtest use 1.28.x -p path)" >> $GITHUB_ENV
 
     - name: Verify envtest setup
       run: |
