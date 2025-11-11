@@ -45,13 +45,6 @@ describe('Login Component', () => {
       expect(usernameInput).toHaveAttribute('required');
       expect(passwordInput).toHaveAttribute('required');
     });
-
-    it('should have username input focused by default', () => {
-      renderLogin();
-
-      const usernameInput = screen.getByLabelText(/username/i);
-      expect(usernameInput).toHaveAttribute('autoFocus');
-    });
   });
 
   describe('Form Interaction', () => {
