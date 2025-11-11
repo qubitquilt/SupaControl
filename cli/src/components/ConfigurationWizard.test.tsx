@@ -131,7 +131,7 @@ describe('ConfigurationWizard component', () => {
   });
 
   it('should handle external database configuration', () => {
-    const { stdin } = render(<ConfigurationWizard onComplete={mockOnComplete} />);
+    const { lastFrame, stdin } = render(<ConfigurationWizard onComplete={mockOnComplete} />);
 
     // Navigate to database installation step
     for (let i = 0; i < 6; i++) {
@@ -142,9 +142,9 @@ describe('ConfigurationWizard component', () => {
     stdin.write('\x1B[B'); // Down arrow
     stdin.write('\r'); // Confirm
 
-    // Should now ask for database details
-    setTimeout(() => {
-      expect(true).toBe(true); // Test that we got here without errors
-    }, 100);
+    // Check that the wizard has progressed (non-empty output)
+    const output = lastFrame();
+    expect(output).toBeTruthy();
+    expect(output.length).toBeGreaterThan(0);
   });
 });

@@ -44,8 +44,9 @@ describe('Installation component', () => {
   });
 
   it('should render installation screen', () => {
-    vi.mocked(helm.saveHelmValues).mockImplementation(() => new Promise(() => {}));
-    vi.mocked(access).mockImplementation(() => new Promise(() => {}));
+    // Mock with resolved promises to prevent hanging
+    vi.mocked(helm.saveHelmValues).mockResolvedValue('/path/to/values.yaml');
+    vi.mocked(access).mockResolvedValue(undefined);
 
     const { lastFrame } = render(<Installation config={mockConfig} onComplete={mockOnComplete} />);
     const output = lastFrame();
@@ -54,8 +55,9 @@ describe('Installation component', () => {
   });
 
   it('should show installation steps', () => {
-    vi.mocked(helm.saveHelmValues).mockImplementation(() => new Promise(() => {}));
-    vi.mocked(access).mockImplementation(() => new Promise(() => {}));
+    // Mock with resolved promises to prevent hanging
+    vi.mocked(helm.saveHelmValues).mockResolvedValue('/path/to/values.yaml');
+    vi.mocked(access).mockResolvedValue(undefined);
 
     const { lastFrame } = render(<Installation config={mockConfig} onComplete={mockOnComplete} />);
     const output = lastFrame();
@@ -81,9 +83,10 @@ describe('Installation component', () => {
 
     render(<Installation config={mockConfig} onComplete={mockOnComplete} />);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    expect(helm.saveHelmValues).toHaveBeenCalled();
+    // Wait for the mocked function to be called
+    await vi.waitFor(() => {
+      expect(helm.saveHelmValues).toHaveBeenCalled();
+    }, { timeout: 3000 });
   });
 
   it('should handle installation errors', async () => {
@@ -96,9 +99,10 @@ describe('Installation component', () => {
 
     render(<Installation config={mockConfig} onComplete={mockOnComplete} />);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    expect(helm.saveHelmValues).toHaveBeenCalled();
+    // Wait for the mocked function to be called
+    await vi.waitFor(() => {
+      expect(helm.saveHelmValues).toHaveBeenCalled();
+    }, { timeout: 3000 });
   });
 
   it('should call onComplete when installation finishes', async () => {
@@ -118,9 +122,9 @@ describe('Installation component', () => {
 
     render(<Installation config={mockConfig} onComplete={mockOnComplete} />);
 
-    // Wait for all async operations
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    expect(mockOnComplete).toHaveBeenCalled();
+    // Wait for onComplete to be called
+    await vi.waitFor(() => {
+      expect(mockOnComplete).toHaveBeenCalled();
+    }, { timeout: 5000 });
   });
 });
