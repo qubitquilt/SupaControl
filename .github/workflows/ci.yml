@@ -38,6 +38,8 @@ jobs:
     - name: Install envtest binaries for controller tests
       run: |
         go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+        export PATH=$PATH:$(go env GOPATH)/bin
+        setup-envtest use 1.28.x
         echo "KUBEBUILDER_ASSETS=$(setup-envtest use -p path 1.28.x)" >> $GITHUB_ENV
 
     - name: Run tests with coverage
