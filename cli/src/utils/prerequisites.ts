@@ -22,7 +22,7 @@ const prerequisites: PrerequisiteCheck[] = [
   {
     name: 'kubectl',
     command: 'kubectl',
-    args: ['version', '--client', '--short'],
+    args: ['version', '--client'],
     required: true,
     installUrl: 'https://kubernetes.io/docs/tasks/tools/',
   },

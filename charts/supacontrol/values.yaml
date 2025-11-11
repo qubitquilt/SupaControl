@@ -24,7 +24,7 @@ securityContext: {}
 
 service:
   type: ClusterIP
-  port: 8080
+  port: 8091
 
 ingress:
   enabled: true
@@ -63,13 +63,15 @@ affinity: {}
 
 # Application Configuration
 config:
-  jwtSecret: ""  # REQUIRED: Set this to a secure random string
+  # REQUIRED: Set a secure JWT secret for authentication
+  jwtSecret: ""
 
   database:
-    host: "supacontrol-postgresql"
+    host: "supacontrol-postgresql"  # Use internal PostgreSQL service
     port: "5432"
     user: "supacontrol"
-    password: ""  # REQUIRED: Set database password
+    # REQUIRED: Set a secure password for the database user
+    password: ""
     name: "supacontrol"
 
   kubernetes:
@@ -84,11 +86,17 @@ config:
 # PostgreSQL subchart configuration
 postgresql:
   enabled: true
+  fullnameOverride: "supacontrol-postgresql"
+  image:
+    registry: docker.io
+    repository: bitnami/postgresql
+    tag: "14.11.0"  # Use specific stable version
   auth:
     username: supacontrol
-    password: ""  # REQUIRED: Set database password
+    # REQUIRED: Set a secure password for the PostgreSQL database (or leave empty for auto-generation)
+    password: ""
     database: supacontrol
   primary:
     persistence:
       enabled: true
-      size: 10Gi
+      size: 5Gi  # Reduced size for faster startup

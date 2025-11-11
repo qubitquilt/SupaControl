@@ -203,8 +203,8 @@ kubectl get nodes
 
 2. **Port Forward** (temporary):
    ```bash
-   kubectl port-forward -n supacontrol svc/supacontrol 8080:8080
-   # Access at http://localhost:8080
+   kubectl port-forward -n supacontrol svc/supacontrol 8091:8091
+   # Access at http://localhost:8091
    ```
 
 3. **Check TLS Certificate**:
