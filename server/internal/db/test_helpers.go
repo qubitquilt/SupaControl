@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
 
@@ -87,27 +86,4 @@ func createTestUser(t *testing.T, client *Client, username, passwordHash, role s
 func createTestUserWithDefaults(t *testing.T, client *Client) *User {
 	t.Helper()
 	return createTestUser(t, client, "testuser", "testhash", "admin")
-}
-
-// execSQL executes raw SQL (useful for setting up test conditions)
-func execSQL(t *testing.T, db *sqlx.DB, query string, args ...interface{}) {
-	t.Helper()
-
-	_, err := db.Exec(query, args...)
-	if err != nil {
-		t.Fatalf("Failed to execute SQL: %v", err)
-	}
-}
-
-// querySingleInt queries a single integer value
-func querySingleInt(t *testing.T, db *sqlx.DB, query string, args ...interface{}) int {
-	t.Helper()
-
-	var result int
-	err := db.Get(&result, query, args...)
-	if err != nil {
-		t.Fatalf("Failed to query single int: %v", err)
-	}
-
-	return result
 }
