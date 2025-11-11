@@ -733,7 +733,7 @@ helm install supacontrol ./charts/supacontrol -f values.yaml  # Manual install
 | `SERVER_PORT` | HTTP server port | No (default: 8091) |
 | `KUBECONFIG` | Path to kubeconfig | No (in-cluster) |
 | `DEFAULT_INGRESS_CLASS` | Ingress class | No (default: nginx) |
-| `DEFAULT_INGRESS_DOMAIN` | Base domain | No |
+| `DEFAULT_INGRESS_DOMAIN` | Base domain | No (default: supabase.example.com) |
 
 ### API Endpoints Quick Reference
 
@@ -759,6 +759,6 @@ DELETE /api/v1/instances/:name         # Delete instance
 
 ---
 
-**Last Updated**: November 2025
+**Last Updated**: November 2024
 **Maintained By**: SupaControl Contributors
 **Questions?**: Open an issue on GitHub
