@@ -759,6 +759,6 @@ DELETE /api/v1/instances/:name         # Delete instance
 
 ---
 
-**Last Updated**: November 2024
+**Last Updated**: November 2025
 **Maintained By**: SupaControl Contributors
 **Questions?**: Open an issue on GitHub

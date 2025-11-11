@@ -1150,5 +1150,5 @@ For questions or suggestions about the architecture, please open an issue on Git
 ---
 
 **Document Version**: 1.0
-**Last Updated**: November 2024
+**Last Updated**: November 2025
 **Maintained By**: SupaControl Contributors
