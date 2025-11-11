@@ -29,21 +29,27 @@ type SupabaseInstanceSpec struct {
 }
 
 // SupabaseInstancePhase represents the current phase of a SupabaseInstance
-// +kubebuilder:validation:Enum=Pending;Provisioning;Running;Deleting;Failed
+// +kubebuilder:validation:Enum=Pending;Provisioning;ProvisioningInProgress;Running;Deleting;DeletingInProgress;Failed
 type SupabaseInstancePhase string
 
 const (
 	// PhasePending indicates the instance is waiting to be provisioned
 	PhasePending SupabaseInstancePhase = "Pending"
 
-	// PhaseProvisioning indicates the instance is being provisioned
+	// PhaseProvisioning indicates the provisioning Job has been created
 	PhaseProvisioning SupabaseInstancePhase = "Provisioning"
+
+	// PhaseProvisioningInProgress indicates the provisioning Job is actively running
+	PhaseProvisioningInProgress SupabaseInstancePhase = "ProvisioningInProgress"
 
 	// PhaseRunning indicates the instance is running and healthy
 	PhaseRunning SupabaseInstancePhase = "Running"
 
-	// PhaseDeleting indicates the instance is being deleted
+	// PhaseDeleting indicates the cleanup Job has been created
 	PhaseDeleting SupabaseInstancePhase = "Deleting"
+
+	// PhaseDeletingInProgress indicates the cleanup Job is actively running
+	PhaseDeletingInProgress SupabaseInstancePhase = "DeletingInProgress"
 
 	// PhaseFailed indicates the instance has failed
 	PhaseFailed SupabaseInstancePhase = "Failed"
@@ -86,6 +92,14 @@ type SupabaseInstanceStatus struct {
 	// HelmReleaseName is the name of the Helm release
 	// +optional
 	HelmReleaseName string `json:"helmReleaseName,omitempty"`
+
+	// ProvisioningJobName is the name of the current/last provisioning Job
+	// +optional
+	ProvisioningJobName string `json:"provisioningJobName,omitempty"`
+
+	// CleanupJobName is the name of the current/last cleanup Job
+	// +optional
+	CleanupJobName string `json:"cleanupJobName,omitempty"`
 }
 
 // Condition types for SupabaseInstance
