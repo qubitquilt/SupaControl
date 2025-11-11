@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -69,6 +70,16 @@ func TestMain(m *testing.M) {
 	}
 	if k8sClient == nil {
 		panic("k8s client is nil")
+	}
+
+	// Create the controller namespace for tests
+	// This is needed because the controller creates Jobs in this namespace
+	ctx := context.Background()
+	controllerNs := &corev1.Namespace{}
+	controllerNs.Name = "supacontrol-system"
+	err = k8sClient.Create(ctx, controllerNs)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create controller namespace: %v", err))
 	}
 
 	// Run tests
