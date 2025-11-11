@@ -29,11 +29,11 @@ import (
 // 	Role         string
 // 	CreatedAt    string
 // 	UpdatedAt    string
-// }
+}
 // mockDBClient is a mock implementation of db.Client for testing
 type mockDBClient struct {
-	getUserByUsernameFunc       func(username string) (*User, error)
-	getUserByIDFunc             func(id int64) (*User, error)
+	getUserByUsernameFunc       func(username string) (*db.User, error)
+	getUserByIDFunc             func(id int64) (*db.User, error)
 	createAPIKeyFunc            func(userID int64, name, keyHash string, expiresAt *time.Time) (*apitypes.APIKey, error)
 	listAPIKeysByUserFunc       func(userID int64) ([]*apitypes.APIKey, error)
 	listAllAPIKeysFunc          func() ([]*apitypes.APIKey, error)
@@ -41,70 +41,70 @@ type mockDBClient struct {
 	deleteAPIKeyFunc            func(id int64) error
 	getAPIKeyByHashFunc         func(keyHash string) (*apitypes.APIKey, error)
 	updateAPIKeyLastUsedFunc    func(id int64) error
-// }
+}
 
-func (m *mockDBClient) GetUserByUsername(username string) (*User, error) {
+func (m *mockDBClient) GetUserByUsername(username string) (*db.User, error) {
 	if m.getUserByUsernameFunc != nil {
 		return m.getUserByUsernameFunc(username)
 	}
 	return nil, fmt.Errorf("GetUserByUsername not implemented")
-// }
+}
 
-func (m *mockDBClient) GetUserByID(id int64) (*User, error) {
+func (m *mockDBClient) GetUserByID(id int64) (*db.User, error) {
 	if m.getUserByIDFunc != nil {
 		return m.getUserByIDFunc(id)
 	}
 	return nil, fmt.Errorf("GetUserByID not implemented")
-// }
+}
 
 func (m *mockDBClient) CreateAPIKey(userID int64, name, keyHash string, expiresAt *time.Time) (*apitypes.APIKey, error) {
 	if m.createAPIKeyFunc != nil {
 		return m.createAPIKeyFunc(userID, name, keyHash, expiresAt)
 	}
 	return nil, fmt.Errorf("CreateAPIKey not implemented")
-// }
+}
 
 func (m *mockDBClient) ListAPIKeysByUser(userID int64) ([]*apitypes.APIKey, error) {
 	if m.listAPIKeysByUserFunc != nil {
 		return m.listAPIKeysByUserFunc(userID)
 	}
 	return nil, fmt.Errorf("ListAPIKeysByUser not implemented")
-// }
+}
 
 func (m *mockDBClient) ListAllAPIKeys() ([]*apitypes.APIKey, error) {
 	if m.listAllAPIKeysFunc != nil {
 		return m.listAllAPIKeysFunc()
 	}
 	return nil, fmt.Errorf("ListAllAPIKeys not implemented")
-// }
+}
 
 func (m *mockDBClient) GetAPIKeyByID(id int64) (*apitypes.APIKey, error) {
 	if m.getAPIKeyByIDFunc != nil {
 		return m.getAPIKeyByIDFunc(id)
 	}
 	return nil, fmt.Errorf("GetAPIKeyByID not implemented")
-// }
+}
 
 func (m *mockDBClient) DeleteAPIKey(id int64) error {
 	if m.deleteAPIKeyFunc != nil {
 		return m.deleteAPIKeyFunc(id)
 	}
 	return fmt.Errorf("DeleteAPIKey not implemented")
-// }
+}
 
 func (m *mockDBClient) GetAPIKeyByHash(keyHash string) (*apitypes.APIKey, error) {
 	if m.getAPIKeyByHashFunc != nil {
 		return m.getAPIKeyByHashFunc(keyHash)
 	}
 	return nil, fmt.Errorf("GetAPIKeyByHash not implemented")
-// }
+}
 
 func (m *mockDBClient) UpdateAPIKeyLastUsed(id int64) error {
 	if m.updateAPIKeyLastUsedFunc != nil {
 		return m.updateAPIKeyLastUsedFunc(id)
 	}
 	return nil
-// }
+}
 
 // mockCRClient is a mock implementation of k8s.CRClient for testing
 type mockCRClient struct {
@@ -112,35 +112,35 @@ type mockCRClient struct {
 	getSupabaseInstanceFunc    func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error)
 	listSupabaseInstancesFunc  func(ctx context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error)
 	deleteSupabaseInstanceFunc func(ctx context.Context, name string) error
-// }
+}
 
 func (m *mockCRClient) CreateSupabaseInstance(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
 	if m.createSupabaseInstanceFunc != nil {
 		return m.createSupabaseInstanceFunc(ctx, instance)
 	}
 	return fmt.Errorf("CreateSupabaseInstance not implemented")
-// }
+}
 
 func (m *mockCRClient) GetSupabaseInstance(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 	if m.getSupabaseInstanceFunc != nil {
 		return m.getSupabaseInstanceFunc(ctx, name)
 	}
 	return nil, fmt.Errorf("GetSupabaseInstance not implemented")
-// }
+}
 
 func (m *mockCRClient) ListSupabaseInstances(ctx context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error) {
 	if m.listSupabaseInstancesFunc != nil {
 		return m.listSupabaseInstancesFunc(ctx)
 	}
 	return nil, fmt.Errorf("ListSupabaseInstances not implemented")
-// }
+}
 
 func (m *mockCRClient) DeleteSupabaseInstance(ctx context.Context, name string) error {
 	if m.deleteSupabaseInstanceFunc != nil {
 		return m.deleteSupabaseInstanceFunc(ctx, name)
 	}
 	return fmt.Errorf("DeleteSupabaseInstance not implemented")
-// }
+}
 
 // Helper to create test echo context
 func newTestContext(method, path, body string) (echo.Context, *httptest.ResponseRecorder) {
@@ -150,7 +150,7 @@ func newTestContext(method, path, body string) (echo.Context, *httptest.Response
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	return c, rec
-// }
+}
 
 // Helper to set auth context
 func setAuthContext(c echo.Context, userID int64, username, role string) {
@@ -160,7 +160,7 @@ func setAuthContext(c echo.Context, userID int64, username, role string) {
 		Role:     role,
 		IsAPIKey: false,
 	})
-// }
+}
 
 // TestHealthCheck tests the health check endpoint
 func TestHealthCheck(t *testing.T) {
@@ -188,7 +188,7 @@ func TestHealthCheck(t *testing.T) {
 	if resp["time"] == "" {
 		t.Error("expected non-empty time field")
 	}
-// }
+}
 
 // TestLogin tests the login endpoint
 func TestLogin(t *testing.T) {
@@ -203,7 +203,7 @@ func TestLogin(t *testing.T) {
 			name:        "successful login",
 			requestBody: `{"username":"admin","password":"admin"}`,
 			setupMock: func(db *mockDBClient, authSvc *auth.Service) {
-				db.getUserByUsernameFunc = func(username string) (*User, error) {
+				db.getUserByUsernameFunc = func(username string) (*db.User, error) {
 					if username != "admin" {
 						return nil, nil
 					}
@@ -233,7 +233,7 @@ func TestLogin(t *testing.T) {
 			name:        "user not found",
 			requestBody: `{"username":"nonexistent","password":"admin"}`,
 			setupMock: func(db *mockDBClient, authSvc *auth.Service) {
-				db.getUserByUsernameFunc = func(username string) (*User, error) {
+				db.getUserByUsernameFunc = func(username string) (*db.User, error) {
 					return nil, nil // User not found
 				}
 			},
@@ -244,7 +244,7 @@ func TestLogin(t *testing.T) {
 			name:        "wrong password",
 			requestBody: `{"username":"admin","password":"wrongpassword"}`,
 			setupMock: func(db *mockDBClient, authSvc *auth.Service) {
-				db.getUserByUsernameFunc = func(username string) (*User, error) {
+				db.getUserByUsernameFunc = func(username string) (*db.User, error) {
 					hash, _ := authSvc.HashPassword("admin")
 					return &User{
 						ID:           1,
@@ -309,7 +309,7 @@ func TestLogin(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestGetAuthMe tests the /auth/me endpoint
 func TestGetAuthMe(t *testing.T) {
@@ -324,7 +324,7 @@ func TestGetAuthMe(t *testing.T) {
 			name:    "successful get user info",
 			setAuth: true,
 			setupMock: func(db *mockDBClient) {
-				db.getUserByIDFunc = func(id int64) (*User, error) {
+				db.getUserByIDFunc = func(id int64) (*db.User, error) {
 					return &User{
 						ID:       1,
 						Username: "testuser",
@@ -348,7 +348,7 @@ func TestGetAuthMe(t *testing.T) {
 			name:    "user not found in database",
 			setAuth: true,
 			setupMock: func(db *mockDBClient) {
-				db.getUserByIDFunc = func(id int64) (*User, error) {
+				db.getUserByIDFunc = func(id int64) (*db.User, error) {
 					return nil, nil
 				}
 			},
@@ -392,7 +392,7 @@ func TestGetAuthMe(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestCreateAPIKey tests the API key creation endpoint
 func TestCreateAPIKey(t *testing.T) {
@@ -490,7 +490,7 @@ func TestCreateAPIKey(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestListAPIKeys tests listing API keys
 func TestListAPIKeys(t *testing.T) {
@@ -589,7 +589,7 @@ func TestListAPIKeys(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestDeleteAPIKey tests deleting an API key
 func TestDeleteAPIKey(t *testing.T) {
@@ -720,7 +720,7 @@ func TestDeleteAPIKey(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestCreateInstance tests creating a Supabase instance
 func TestCreateInstance(t *testing.T) {
@@ -821,7 +821,7 @@ func TestCreateInstance(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestListInstances tests listing instances
 func TestListInstances(t *testing.T) {
@@ -927,7 +927,7 @@ func TestListInstances(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestGetInstance tests getting a single instance
 func TestGetInstance(t *testing.T) {
@@ -1011,7 +1011,7 @@ func TestGetInstance(t *testing.T) {
 			}
 		})
 	}
-// }
+}
 
 // TestDeleteInstance tests deleting an instance
 func TestDeleteInstance(t *testing.T) {
@@ -1085,4 +1085,4 @@ func TestDeleteInstance(t *testing.T) {
 			}
 		})
 	}
-// }
+}

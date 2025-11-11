@@ -6,14 +6,15 @@ import (
 
 	apitypes "github.com/qubitquilt/supacontrol/pkg/api-types"
 	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
+	"github.com/qubitquilt/supacontrol/server/internal/db"
 )
 
 // DBClient defines the database operations needed by API handlers
 // This interface allows for easy mocking in tests
 type DBClient interface {
 	// User operations
-	GetUserByUsername(username string) (*User, error)
-	GetUserByID(id int64) (*User, error)
+	GetUserByUsername(username string) (*db.User, error)
+	GetUserByID(id int64) (*db.User, error)
 
 	// API key operations
 	CreateAPIKey(userID int64, name, keyHash string, expiresAt *time.Time) (*apitypes.APIKey, error)
@@ -32,15 +33,4 @@ type CRClient interface {
 	GetSupabaseInstance(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error)
 	ListSupabaseInstances(ctx context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error)
 	DeleteSupabaseInstance(ctx context.Context, name string) error
-}
-
-// User represents a user from the database
-// This matches db.User but is defined here to avoid import cycles in tests
-type User struct {
-	ID           int64
-	Username     string
-	PasswordHash string
-	Role         string
-	CreatedAt    string
-	UpdatedAt    string
 }

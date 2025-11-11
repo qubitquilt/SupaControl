@@ -20,13 +20,12 @@ import (
 // Handler holds dependencies for API handlers
 type Handler struct {
 	authService *auth.Service
-	dbClient    *db.Client
-	crClient    *k8s.CRClient
-	// Optional: keep dbClient for backward compatibility or remove if using K8s as sole source of truth
+	dbClient    DBClient
+	crClient    CRClient
 }
 
 // NewHandler creates a new API handler
-func NewHandler(authService *auth.Service, dbClient *db.Client, crClient *k8s.CRClient) *Handler {
+func NewHandler(authService *auth.Service, dbClient DBClient, crClient CRClient) *Handler {
 	return &Handler{
 		authService: authService,
 		dbClient:    dbClient,
