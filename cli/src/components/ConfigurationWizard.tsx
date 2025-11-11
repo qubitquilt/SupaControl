@@ -57,6 +57,16 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
     dbName: 'supacontrol',
   });
 
+  // Helper function to get missing required database fields for external database
+  const getMissingDbFields = (config: Partial<Configuration>) => {
+    if (config.installDatabase) {
+      return [];
+    }
+    
+    const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
+    return requiredDbFields.filter(field => !config[field as keyof typeof config]);
+  };
+
   const handleInput = (field: keyof Configuration, value: any) => {
     setConfig({ ...config, [field]: value });
   };
@@ -99,14 +109,10 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
 
   const confirmAndContinue = () => {
     // Validate required fields for external database
-    if (!config.installDatabase) {
-      const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
-      for (const field of requiredDbFields) {
-        if (!config[field as keyof typeof config]) {
-          setStep(field);
-          return;
-        }
-      }
+    const missingFields = getMissingDbFields(config);
+    if (missingFields.length > 0) {
+      setStep(missingFields[0] as Step);
+      return;
     }
     
     onComplete(config as Configuration);
@@ -433,8 +439,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
           
           {/* Validation warnings */}
           {!config.installDatabase && (() => {
-            const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
-            const missingFields = requiredDbFields.filter(field => !config[field as keyof typeof config]);
+            const missingFields = getMissingDbFields(config);
             
             if (missingFields.length === 0) return null;
             
@@ -471,8 +476,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
           <Box marginTop={1}>
             <Text>
               {!config.installDatabase && (() => {
-                const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
-                const missingFields = requiredDbFields.filter(field => !config[field as keyof typeof config]);
+                const missingFields = getMissingDbFields(config);
                 return missingFields.length > 0
                   ? 'Press Enter to fix database configuration...'
                   : 'Press Enter to continue with installation...';
