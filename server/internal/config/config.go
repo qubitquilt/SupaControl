@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Config holds all application configuration
@@ -36,8 +38,13 @@ type Config struct {
 
 // Load loads configuration from environment variables with defaults
 func Load() (*Config, error) {
+	// Load .env file if it exists
+	if err := loadDotEnv(); err != nil {
+		return nil, fmt.Errorf("failed to load .env file: %w", err)
+	}
+
 	cfg := &Config{
-		ServerPort: getEnv("SERVER_PORT", "8080"),
+		ServerPort: getEnv("SERVER_PORT", "8091"),
 		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
 
 		DBHost:     getEnv("DB_HOST", "localhost"),
@@ -101,4 +108,51 @@ func getEnvBool(key string, defaultValue bool) bool {
 	}
 	// Accept "true", "1", "yes" as true, everything else as false
 	return value == "true" || value == "1" || value == "yes"
+}
+
+// loadDotEnv loads environment variables from .env file
+func loadDotEnv() error {
+	// Try to load from current directory first
+	if err := loadEnvFile(".env"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadEnvFile loads environment variables from a file
+func loadEnvFile(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		// If file doesn't exist, return without error
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse KEY=VALUE format
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Set environment variable if not already set
+		if os.Getenv(key) == "" {
+			os.Setenv(key, value)
+		}
+	}
+
+	return scanner.Err()
 }

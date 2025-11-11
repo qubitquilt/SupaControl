@@ -403,7 +403,7 @@ docker build -t supacontrol/server:latest .
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SERVER_PORT` | HTTP server port | `8080` |
+| `SERVER_PORT` | HTTP server port | `8091` |
 | `SERVER_HOST` | HTTP server host | `0.0.0.0` |
 | `DB_HOST` | PostgreSQL host | `localhost` |
 | `DB_PORT` | PostgreSQL port | `5432` |

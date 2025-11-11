@@ -14,6 +14,9 @@ export interface Configuration {
   dbPassword: string;
   installDatabase: boolean;
   dbHost?: string;
+  dbPort?: string;
+  dbUser?: string;
+  dbName?: string;
   tlsEnabled: boolean;
   certManagerIssuer?: string;
 }
@@ -32,6 +35,10 @@ type Step =
   | 'certManagerIssuer'
   | 'installDatabase'
   | 'dbHost'
+  | 'dbPort'
+  | 'dbUser'
+  | 'dbName'
+  | 'dbPassword'
   | 'secrets'
   | 'confirm';
 
@@ -42,9 +49,12 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
     releaseName: 'supacontrol',
     ingressClass: 'nginx',
     ingressDomain: 'supabase.example.com',
-    installDatabase: true,
+    installDatabase: false, // Start with false to test external database flow
     tlsEnabled: true,
     certManagerIssuer: 'letsencrypt-prod',
+    dbPort: '5432',
+    dbUser: 'supacontrol',
+    dbName: 'supacontrol',
   });
 
   const handleInput = (field: keyof Configuration, value: any) => {
@@ -59,12 +69,12 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
       'ingressDomain',
       'ingressClass',
       'tlsEnabled',
-      ...(config.tlsEnabled === true ? ['certManagerIssuer' as Step] : []),
+      ...(config.tlsEnabled === true ? ['certManagerIssuer'] : []),
       'installDatabase',
-      ...(config.installDatabase === false ? ['dbHost' as Step] : []),
+      ...(config.installDatabase === false ? ['dbHost', 'dbPort', 'dbUser', 'dbName', 'dbPassword'] : []),
       'secrets',
       'confirm',
-    ];
+    ] as Step[];
 
     const currentIndex = steps.indexOf(step);
     if (currentIndex < steps.length - 1) {
@@ -73,15 +83,38 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
   };
 
   const generateSecrets = () => {
-    setConfig({
+    const newConfig = {
       ...config,
       jwtSecret: generateJWTSecret(),
-      dbPassword: generateDatabasePassword(),
-    });
+    };
+    
+    // Only generate new database password if installing a new database
+    if (config.installDatabase) {
+      newConfig.dbPassword = generateDatabasePassword();
+    }
+    
+    setConfig(newConfig);
     nextStep();
   };
 
   const confirmAndContinue = () => {
+    // Validate required fields for external database
+    if (!config.installDatabase) {
+      if (!config.dbHost || !config.dbUser || !config.dbName || !config.dbPassword) {
+        // Go back to the first missing field
+        if (!config.dbHost) {
+          setStep('dbHost');
+        } else if (!config.dbUser) {
+          setStep('dbUser');
+        } else if (!config.dbName) {
+          setStep('dbName');
+        } else {
+          setStep('dbPassword');
+        }
+        return;
+      }
+    }
+    
     onComplete(config as Configuration);
   };
 
@@ -215,10 +248,21 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
                 { label: 'No - Use external database', value: false },
               ]}
               onSelect={(item) => {
-                handleInput('installDatabase', item.value);
-                nextStep();
+                const newInstallDatabase = item.value;
+                handleInput('installDatabase', newInstallDatabase);
+                
+                // If switching to external database, go to dbHost step
+                if (!newInstallDatabase) {
+                  setStep('dbHost');
+                } else {
+                  nextStep();
+                }
               }}
             />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>• Yes: Install new PostgreSQL with SupaControl (recommended)</Text>
+            <Text dimColor>• No: Use your existing PostgreSQL database (will ask for connection details)</Text>
           </Box>
         </Box>
       )}
@@ -226,6 +270,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
       {step === 'dbHost' && (
         <Box flexDirection="column">
           <Text>Enter external PostgreSQL host:</Text>
+          <Text dimColor>(e.g., postgres.example.com, localhost, or 192.168.1.100)</Text>
           <Box marginTop={1}>
             <Text color="green">➜ </Text>
             <TextInput
@@ -238,13 +283,79 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
         </Box>
       )}
 
+      {step === 'dbPort' && (
+        <Box flexDirection="column">
+          <Text>Enter PostgreSQL port:</Text>
+          <Text dimColor>(default: 5432)</Text>
+          <Box marginTop={1}>
+            <Text color="green">➜ </Text>
+            <TextInput
+              value={config.dbPort || ''}
+              onChange={(value) => handleInput('dbPort', value)}
+              onSubmit={nextStep}
+              placeholder="5432"
+            />
+          </Box>
+        </Box>
+      )}
+
+      {step === 'dbUser' && (
+        <Box flexDirection="column">
+          <Text>Enter PostgreSQL username:</Text>
+          <Box marginTop={1}>
+            <Text color="green">➜ </Text>
+            <TextInput
+              value={config.dbUser || ''}
+              onChange={(value) => handleInput('dbUser', value)}
+              onSubmit={nextStep}
+              placeholder="supacontrol"
+            />
+          </Box>
+        </Box>
+      )}
+
+      {step === 'dbName' && (
+        <Box flexDirection="column">
+          <Text>Enter PostgreSQL database name:</Text>
+          <Box marginTop={1}>
+            <Text color="green">➜ </Text>
+            <TextInput
+              value={config.dbName || ''}
+              onChange={(value) => handleInput('dbName', value)}
+              onSubmit={nextStep}
+              placeholder="supacontrol"
+            />
+          </Box>
+        </Box>
+      )}
+
+      {step === 'dbPassword' && (
+        <Box flexDirection="column">
+          <Text>Enter the password for your existing PostgreSQL database:</Text>
+          <Text dimColor>(This should be the password for the database user you specified above)</Text>
+          <Box marginTop={1}>
+            <Text color="green">➜ </Text>
+            <TextInput
+              value={config.dbPassword || ''}
+              onChange={(value) => handleInput('dbPassword', value)}
+              onSubmit={nextStep}
+              placeholder="Your database password"
+            />
+          </Box>
+        </Box>
+      )}
+
       {step === 'secrets' && (
         <Box flexDirection="column">
           <Text bold color="yellow">
             🔐 Generating secure secrets...
           </Text>
           <Box marginTop={1}>
-            <Text>Press Enter to generate JWT secret and database password</Text>
+            {config.installDatabase ? (
+              <Text>Press Enter to generate JWT secret and database password</Text>
+            ) : (
+              <Text>Press Enter to generate JWT secret (database password already provided)</Text>
+            )}
           </Box>
           <Box marginTop={1}>
             <Text color="green">➜ </Text>
@@ -294,20 +405,69 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
             <Text>
               <Text color="gray">Database: </Text>
               <Text bold>
-                {config.installDatabase ? 'Install PostgreSQL' : `External (${config.dbHost})`}
+                {config.installDatabase ? 'Install PostgreSQL' :
+                  `External (${config.dbHost || 'undefined'}:${config.dbPort || '5432'}/${config.dbName || 'supacontrol'})`}
               </Text>
             </Text>
+            {!config.installDatabase && (
+              <>
+                <Text>
+                  <Text color="gray">DB User: </Text>
+                  <Text bold>{config.dbUser || 'supacontrol'}</Text>
+                </Text>
+                <Text>
+                  <Text color="gray">DB Password: </Text>
+                  {!config.dbPassword ? (
+                    <Text bold color="red">MISSING - Please provide database password</Text>
+                  ) : (
+                    <Text bold color="yellow">Provided by user ✓</Text>
+                  )}
+                </Text>
+              </>
+            )}
+            {config.installDatabase && (
+              <Text>
+                <Text color="gray">DB Password: </Text>
+                <Text bold color="green">Generated ✓</Text>
+              </Text>
+            )}
             <Text>
               <Text color="gray">JWT Secret: </Text>
               <Text bold color="green">Generated ✓</Text>
             </Text>
-            <Text>
-              <Text color="gray">DB Password: </Text>
-              <Text bold color="green">Generated ✓</Text>
-            </Text>
           </Box>
+          
+          {/* Validation warnings */}
+          {!config.installDatabase && (!config.dbHost || !config.dbUser || !config.dbName || !config.dbPassword) && (
+            <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="red" paddingX={2} paddingY={1}>
+              <Text bold color="red">
+                ⚠️  Incomplete External Database Configuration
+              </Text>
+              <Box marginTop={1}>
+                <Text color="red">
+                  The following fields are required for external database:
+                </Text>
+              </Box>
+              {!config.dbHost && <Text color="red">• Database host address</Text>}
+              {!config.dbUser && <Text color="red">• Database username</Text>}
+              {!config.dbName && <Text color="red">• Database name</Text>}
+              {!config.dbPassword && <Text color="red">• Database password</Text>}
+              <Box marginTop={1}>
+                <Text color="red">Press Enter to go to database configuration...</Text>
+              </Box>
+              <Box marginTop={1}>
+                <Text color="yellow">Note: You can go back to fix any step</Text>
+              </Box>
+            </Box>
+          )}
+          
           <Box marginTop={1}>
-            <Text>Press Enter to continue with installation...</Text>
+            <Text>
+              {!config.installDatabase && (!config.dbHost || !config.dbUser || !config.dbName || !config.dbPassword)
+                ? 'Press Enter to fix database configuration...'
+                : 'Press Enter to continue with installation...'
+              }
+            </Text>
           </Box>
           <Box marginTop={1}>
             <Text color="green">➜ </Text>
