@@ -1,7 +1,6 @@
 package db
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,17 +55,12 @@ func setupTestDB(t *testing.T) (*Client, func()) {
 func cleanTestData(t *testing.T, client *Client) {
 	t.Helper()
 
-	// Clean in reverse order of dependencies
-	tables := []string{
-		"api_keys",
-		"users",
-	}
-
-	for _, table := range tables {
-		_, err := client.db.Exec(fmt.Sprintf("DELETE FROM %s", table))
-		if err != nil {
-			t.Logf("Warning: failed to clean table %s: %v", table, err)
-		}
+	// TRUNCATE is faster than DELETE and resets auto-incrementing counters.
+	// CASCADE handles foreign key relationships automatically.
+	query := "TRUNCATE TABLE users, api_keys RESTART IDENTITY CASCADE"
+	_, err := client.db.Exec(query)
+	if err != nil {
+		t.Fatalf("Failed to clean test data: %v", err)
 	}
 }
 

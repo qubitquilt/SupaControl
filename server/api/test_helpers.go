@@ -86,7 +86,7 @@ func (m *mockDBClient) UpdateAPIKeyLastUsed(id int64) error {
 	if m.updateAPIKeyLastUsedFunc != nil {
 		return m.updateAPIKeyLastUsedFunc(id)
 	}
-	return nil
+	return fmt.Errorf("UpdateAPIKeyLastUsed not implemented")
 }
 
 // mockCRClient is a mock implementation of CRClient for testing
