@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/cli"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
-	"github.com/qubitquilt/supacontrol/server/internal/k8s"
 )
 
 const (
@@ -47,6 +43,8 @@ type SupabaseInstanceReconciler struct {
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
@@ -109,6 +107,8 @@ func (r *SupabaseInstanceReconciler) reconcileNormal(ctx context.Context, instan
 		return r.reconcilePending(ctx, instance)
 	case supacontrolv1alpha1.PhaseProvisioning:
 		return r.reconcileProvisioning(ctx, instance)
+	case supacontrolv1alpha1.PhaseProvisioningInProgress:
+		return r.reconcileProvisioningInProgress(ctx, instance)
 	case supacontrolv1alpha1.PhaseRunning:
 		return r.reconcileRunning(ctx, instance)
 	case supacontrolv1alpha1.PhaseFailed:
@@ -123,52 +123,152 @@ func (r *SupabaseInstanceReconciler) reconcileNormal(ctx context.Context, instan
 	}
 }
 
-// reconcilePending transitions from Pending to Provisioning
+// reconcilePending transitions from Pending to Provisioning by creating a Job
 func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.Info("Starting provisioning", "projectName", instance.Spec.ProjectName)
+	logger.Info("Starting provisioning via Job", "projectName", instance.Spec.ProjectName)
+
+	// Create provisioning Job
+	job, err := r.createProvisioningJob(ctx, instance)
+	if err != nil {
+		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create provisioning Job: %v", err))
+	}
 
 	// Transition to Provisioning phase
 	instance.Status.Phase = supacontrolv1alpha1.PhaseProvisioning
 	instance.Status.Namespace = fmt.Sprintf("supa-%s", instance.Spec.ProjectName)
 	instance.Status.HelmReleaseName = instance.Spec.ProjectName
+	instance.Status.ProvisioningJobName = job.Name
 	now := metav1.Now()
 	instance.Status.LastTransitionTime = &now
+
+	meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+		Type:               supacontrolv1alpha1.ConditionTypeReady,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: instance.Generation,
+		Reason:             "ProvisioningJobCreated",
+		Message:            fmt.Sprintf("Provisioning Job '%s' created", job.Name),
+	})
 
 	if err := r.Status().Update(ctx, instance); err != nil {
 		return ctrl.Result{}, err
 	}
 
+	// Requeue immediately to check Job status
 	return ctrl.Result{Requeue: true}, nil
 }
 
-// reconcileProvisioning handles the provisioning phase
+// reconcileProvisioning checks the status of the provisioning Job
 func (r *SupabaseInstanceReconciler) reconcileProvisioning(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
-	// Step 1: Create namespace
-	if err := r.ensureNamespace(ctx, instance); err != nil {
-		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create namespace: %v", err))
+	// Get the provisioning Job status
+	jobName := instance.Status.ProvisioningJobName
+	if jobName == "" {
+		// Job name not set, this shouldn't happen - create job
+		logger.Info("Provisioning Job name not set, creating new Job", "projectName", instance.Spec.ProjectName)
+		job, err := r.createProvisioningJob(ctx, instance)
+		if err != nil {
+			return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create provisioning Job: %v", err))
+		}
+		instance.Status.ProvisioningJobName = job.Name
+		if err := r.Status().Update(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Step 2: Create secrets
-	if err := r.ensureSecrets(ctx, instance); err != nil {
-		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create secrets: %v", err))
+	job, err := r.getJobStatus(ctx, jobName)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Error(err, "Provisioning Job not found", "jobName", jobName)
+			return r.transitionToFailed(ctx, instance, fmt.Sprintf("Provisioning Job '%s' not found", jobName))
+		}
+		return ctrl.Result{}, err
 	}
 
-	// Step 3: Install Helm chart
-	if err := r.ensureHelmRelease(ctx, instance); err != nil {
-		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to install Helm chart: %v", err))
+	// Check if Job is running - transition to ProvisioningInProgress
+	if isJobActive(job) {
+		logger.Info("Provisioning Job is running", "jobName", jobName)
+		instance.Status.Phase = supacontrolv1alpha1.PhaseProvisioningInProgress
+		now := metav1.Now()
+		instance.Status.LastTransitionTime = &now
+
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               supacontrolv1alpha1.ConditionTypeReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: instance.Generation,
+			Reason:             "ProvisioningInProgress",
+			Message:            fmt.Sprintf("Provisioning Job '%s' is running", jobName),
+		})
+
+		if err := r.Status().Update(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// Requeue to check status again
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	// Step 4: Create ingresses
-	if err := r.ensureIngresses(ctx, instance); err != nil {
-		// Log warning but don't fail
-		logger.Error(err, "Failed to create ingresses (non-fatal)")
+	// Check if Job succeeded
+	if isJobSucceeded(job) {
+		return r.transitionToRunning(ctx, instance)
 	}
 
-	// Transition to Running
+	// Check if Job failed
+	if isJobFailed(job) {
+		errMsg := getJobConditionMessage(job)
+		if errMsg == "" {
+			errMsg = "Provisioning Job failed after retries"
+		}
+		return r.transitionToFailed(ctx, instance, errMsg)
+	}
+
+	// Job exists but hasn't started yet, requeue
+	logger.Info("Provisioning Job exists but hasn't started", "jobName", jobName)
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+}
+
+// reconcileProvisioningInProgress monitors the running provisioning Job
+func (r *SupabaseInstanceReconciler) reconcileProvisioningInProgress(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) (ctrl.Result, error) {
+	logger := ctrl.LoggerFrom(ctx)
+
+	jobName := instance.Status.ProvisioningJobName
+	job, err := r.getJobStatus(ctx, jobName)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Error(err, "Provisioning Job not found", "jobName", jobName)
+			return r.transitionToFailed(ctx, instance, fmt.Sprintf("Provisioning Job '%s' not found", jobName))
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Check if Job succeeded
+	if isJobSucceeded(job) {
+		logger.Info("Provisioning Job succeeded", "jobName", jobName)
+		return r.transitionToRunning(ctx, instance)
+	}
+
+	// Check if Job failed
+	if isJobFailed(job) {
+		errMsg := getJobConditionMessage(job)
+		if errMsg == "" {
+			errMsg = "Provisioning Job failed after retries"
+		}
+		logger.Error(errors.New(errMsg), "Provisioning Job failed", "jobName", jobName)
+		return r.transitionToFailed(ctx, instance, errMsg)
+	}
+
+	// Job still running, requeue
+	logger.V(1).Info("Provisioning Job still running", "jobName", jobName, "active", job.Status.Active)
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+}
+
+// transitionToRunning transitions the instance to Running phase
+func (r *SupabaseInstanceReconciler) transitionToRunning(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) (ctrl.Result, error) {
+	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Provisioning complete, transitioning to Running", "projectName", instance.Spec.ProjectName)
+
 	instance.Status.Phase = supacontrolv1alpha1.PhaseRunning
 	instance.Status.ErrorMessage = ""
 	now := metav1.Now()
@@ -181,6 +281,12 @@ func (r *SupabaseInstanceReconciler) reconcileProvisioning(ctx context.Context, 
 	}
 	instance.Status.StudioURL = fmt.Sprintf("https://%s-studio.%s", instance.Spec.ProjectName, ingressDomain)
 	instance.Status.APIURL = fmt.Sprintf("https://%s-api.%s", instance.Spec.ProjectName, ingressDomain)
+
+	// Create ingresses
+	if err := r.ensureIngresses(ctx, instance); err != nil {
+		// Log warning but don't fail
+		logger.Error(err, "Failed to create ingresses (non-fatal)")
+	}
 
 	// Update conditions
 	meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
@@ -228,14 +334,14 @@ func (r *SupabaseInstanceReconciler) reconcileFailed(ctx context.Context, instan
 	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 }
 
-// reconcileDelete handles deletion with cleanup
+// reconcileDelete handles deletion with cleanup using a Job
 func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Deleting SupabaseInstance", "projectName", instance.Spec.ProjectName)
 
 	if controllerutil.ContainsFinalizer(instance, FinalizerName) {
-		// Update phase to Deleting
-		if instance.Status.Phase != supacontrolv1alpha1.PhaseDeleting {
+		// Update phase to Deleting if not already
+		if instance.Status.Phase != supacontrolv1alpha1.PhaseDeleting && instance.Status.Phase != supacontrolv1alpha1.PhaseDeletingInProgress {
 			instance.Status.Phase = supacontrolv1alpha1.PhaseDeleting
 			now := metav1.Now()
 			instance.Status.LastTransitionTime = &now
@@ -244,13 +350,13 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 			}
 		}
 
-		// Perform cleanup
-		if err := r.cleanup(ctx, instance); err != nil {
+		// Perform cleanup via Job
+		if err := r.cleanupViaJob(ctx, instance); err != nil {
 			logger.Error(err, "Failed to cleanup resources")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 		}
 
-		// Remove finalizer
+		// Remove finalizer after cleanup complete
 		controllerutil.RemoveFinalizer(instance, FinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
@@ -260,339 +366,70 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 	return ctrl.Result{}, nil
 }
 
-// cleanup removes all resources associated with the instance
-func (r *SupabaseInstanceReconciler) cleanup(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+// cleanupViaJob performs cleanup using a Kubernetes Job
+func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
 	logger := ctrl.LoggerFrom(ctx)
-	namespace := instance.Status.Namespace
-	releaseName := instance.Status.HelmReleaseName
 
-	// Uninstall Helm release
-	if releaseName != "" && namespace != "" {
-		if err := r.uninstallHelmChart(ctx, namespace, releaseName); err != nil {
-			logger.Error(err, "Failed to uninstall Helm chart (non-fatal)")
+	// Check if cleanup Job already exists
+	jobName := instance.Status.CleanupJobName
+	if jobName == "" {
+		// Create cleanup Job
+		job, err := r.createCleanupJob(ctx, instance)
+		if err != nil {
+			return fmt.Errorf("failed to create cleanup Job: %w", err)
 		}
-	}
-
-	// Delete namespace (cascade deletes all resources)
-	if namespace != "" {
-		ns := &corev1.Namespace{}
-		ns.Name = namespace
-		if err := r.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete namespace: %w", err)
+		instance.Status.CleanupJobName = job.Name
+		instance.Status.Phase = supacontrolv1alpha1.PhaseDeletingInProgress
+		now := metav1.Now()
+		instance.Status.LastTransitionTime = &now
+		if err := r.Status().Update(ctx, instance); err != nil {
+			return err
 		}
-		logger.Info("Deleted namespace", "namespace", namespace)
+		logger.Info("Created cleanup Job", "jobName", job.Name)
+		// Return error to requeue and wait for Job completion
+		return fmt.Errorf("cleanup Job created, waiting for completion")
 	}
 
-	return nil
-}
-
-// ensureNamespace creates the namespace if it doesn't exist
-func (r *SupabaseInstanceReconciler) ensureNamespace(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
-	logger := ctrl.LoggerFrom(ctx)
-	namespace := instance.Status.Namespace
-
-	ns := &corev1.Namespace{}
-	ns.Name = namespace
-	ns.Labels = map[string]string{
-		"app.kubernetes.io/managed-by": "supacontrol",
-		"supacontrol.io/instance":      instance.Spec.ProjectName,
-	}
-
-	if err := r.Create(ctx, ns); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			logger.Info("Namespace already exists", "namespace", namespace)
-			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-				Type:               supacontrolv1alpha1.ConditionTypeNamespaceReady,
-				Status:             metav1.ConditionTrue,
-				ObservedGeneration: instance.Generation,
-				Reason:             "NamespaceExists",
-				Message:            "Namespace already exists",
-			})
+	// Get Job status
+	job, err := r.getJobStatus(ctx, jobName)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("Cleanup Job not found, assuming cleanup complete", "jobName", jobName)
 			return nil
 		}
 		return err
 	}
 
-	logger.Info("Created namespace", "namespace", namespace)
-	meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-		Type:               supacontrolv1alpha1.ConditionTypeNamespaceReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: instance.Generation,
-		Reason:             "NamespaceCreated",
-		Message:            "Namespace created successfully",
-	})
-
-	// Create namespace-scoped RBAC for least privilege
-	if err := r.ensureNamespaceRBAC(ctx, instance); err != nil {
-		return fmt.Errorf("failed to create namespace RBAC: %w", err)
-	}
-
-	return nil
-}
-
-// ensureNamespaceRBAC creates namespace-scoped Role and RoleBinding for the controller
-// This implements least privilege by granting permissions only within the instance namespace
-func (r *SupabaseInstanceReconciler) ensureNamespaceRBAC(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
-	logger := ctrl.LoggerFrom(ctx)
-	namespace := instance.Status.Namespace
-
-	// Create Role with namespace-scoped permissions
-	role := &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "supacontrol-instance-manager",
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "supacontrol",
-				"supacontrol.io/instance":      instance.Spec.ProjectName,
-			},
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets", "configmaps"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"services", "pods"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{"networking.k8s.io"},
-				Resources: []string{"ingresses"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-		},
-	}
-
-	if err := r.Create(ctx, role); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			logger.Info("Namespace Role already exists", "namespace", namespace)
-		} else {
-			return err
-		}
-	} else {
-		logger.Info("Created namespace Role", "namespace", namespace)
-	}
-
-	// Create RoleBinding
-	roleBinding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "supacontrol-instance-manager",
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "supacontrol",
-				"supacontrol.io/instance":      instance.Spec.ProjectName,
-			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     "supacontrol-instance-manager",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "supacontrol-controller",
-				Namespace: "supacontrol-system",
-			},
-		},
-	}
-
-	if err := r.Create(ctx, roleBinding); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			logger.Info("Namespace RoleBinding already exists", "namespace", namespace)
-		} else {
-			return err
-		}
-	} else {
-		logger.Info("Created namespace RoleBinding", "namespace", namespace)
-	}
-
-	return nil
-}
-
-// ensureSecrets creates the required secrets
-func (r *SupabaseInstanceReconciler) ensureSecrets(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
-	logger := ctrl.LoggerFrom(ctx)
-	namespace := instance.Status.Namespace
-
-	// Check if secret already exists
-	secretName := fmt.Sprintf("%s-secrets", instance.Spec.ProjectName)
-	existingSecret := &corev1.Secret{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: secretName}, existingSecret)
-
-	if err == nil {
-		logger.Info("Secrets already exist", "namespace", namespace, "secret", secretName)
-		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-			Type:               supacontrolv1alpha1.ConditionTypeSecretsReady,
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: instance.Generation,
-			Reason:             "SecretsExist",
-			Message:            "Secrets already exist",
-		})
+	// Check if Job succeeded
+	if isJobSucceeded(job) {
+		logger.Info("Cleanup Job succeeded", "jobName", jobName)
 		return nil
 	}
 
-	if !apierrors.IsNotFound(err) {
-		return err
-	}
-
-	// Generate secrets
-	postgresPassword, err := k8s.GenerateSecurePassword()
-	if err != nil {
-		return fmt.Errorf("failed to generate postgres password: %w", err)
-	}
-
-	jwtSecret, err := k8s.GenerateJWTSecret()
-	if err != nil {
-		return fmt.Errorf("failed to generate JWT secret: %w", err)
-	}
-
-	anonKey, err := k8s.GenerateJWTSecret()
-	if err != nil {
-		return fmt.Errorf("failed to generate anon key: %w", err)
-	}
-
-	serviceRoleKey, err := k8s.GenerateJWTSecret()
-	if err != nil {
-		return fmt.Errorf("failed to generate service role key: %w", err)
-	}
-
-	// Create secret
-	secret := &corev1.Secret{}
-	secret.Namespace = namespace
-	secret.Name = secretName
-	secret.Labels = map[string]string{
-		"app.kubernetes.io/managed-by": "supacontrol",
-		"supacontrol.io/instance":      instance.Spec.ProjectName,
-	}
-	secret.Data = map[string][]byte{
-		"postgres-password": []byte(postgresPassword),
-		"jwt-secret":        []byte(jwtSecret),
-		"anon-key":          []byte(anonKey),
-		"service-role-key":  []byte(serviceRoleKey),
-	}
-
-	if err := r.Create(ctx, secret); err != nil {
-		return err
-	}
-
-	logger.Info("Created secrets", "namespace", namespace, "secret", secretName)
-	meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-		Type:               supacontrolv1alpha1.ConditionTypeSecretsReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: instance.Generation,
-		Reason:             "SecretsCreated",
-		Message:            "Secrets created successfully",
-	})
-
-	return nil
-}
-
-// ensureHelmRelease installs the Helm chart
-func (r *SupabaseInstanceReconciler) ensureHelmRelease(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
-	logger := ctrl.LoggerFrom(ctx)
-	namespace := instance.Status.Namespace
-	releaseName := instance.Status.HelmReleaseName
-
-	// Check if release already exists
-	settings := cli.New()
-	settings.SetNamespace(namespace)
-
-	actionConfig := new(action.Configuration)
-	if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", func(format string, v ...interface{}) {
-		logger.Info(fmt.Sprintf(format, v...))
-	}); err != nil {
-		return fmt.Errorf("failed to initialize helm action config: %w", err)
-	}
-
-	// Check if release exists
-	getClient := action.NewGet(actionConfig)
-	_, err := getClient.Run(releaseName)
-	if err == nil {
-		logger.Info("Helm release already exists", "namespace", namespace, "release", releaseName)
-		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-			Type:               supacontrolv1alpha1.ConditionTypeHelmReleaseReady,
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: instance.Generation,
-			Reason:             "HelmReleaseExists",
-			Message:            "Helm release already installed",
-		})
+	// Check if Job failed
+	if isJobFailed(job) {
+		errMsg := getJobConditionMessage(job)
+		logger.Error(errors.New(errMsg), "Cleanup Job failed", "jobName", jobName)
+		// Don't block deletion on cleanup failure, just log it
 		return nil
 	}
 
-	// Install release
-	installClient := action.NewInstall(actionConfig)
-	installClient.Namespace = namespace
-	installClient.ReleaseName = releaseName
-	installClient.CreateNamespace = false
-	installClient.Wait = false
-	installClient.Timeout = 10 * time.Minute // Prevent indefinite hangs
-
-	// Set chart version
-	chartVersion := r.ChartVersion
-	if instance.Spec.ChartVersion != "" {
-		chartVersion = instance.Spec.ChartVersion
-	}
-	if chartVersion != "" {
-		installClient.Version = chartVersion
+	// Job still running - ensure phase is DeletingInProgress
+	if isJobActive(job) && instance.Status.Phase != supacontrolv1alpha1.PhaseDeletingInProgress {
+		logger.Info("Cleanup Job is running, transitioning to DeletingInProgress", "jobName", jobName)
+		instance.Status.Phase = supacontrolv1alpha1.PhaseDeletingInProgress
+		now := metav1.Now()
+		instance.Status.LastTransitionTime = &now
+		if err := r.Status().Update(ctx, instance); err != nil {
+			return err
+		}
 	}
 
-	// Get secrets for Helm values
-	secretName := fmt.Sprintf("%s-secrets", instance.Spec.ProjectName)
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: secretName}, secret); err != nil {
-		return fmt.Errorf("failed to get secrets: %w", err)
-	}
-
-	// Build Helm values
-	values := map[string]interface{}{
-		"postgresql": map[string]interface{}{
-			"auth": map[string]interface{}{
-				"postgresPassword": string(secret.Data["postgres-password"]),
-			},
-		},
-		"jwt": map[string]interface{}{
-			"secret":         string(secret.Data["jwt-secret"]),
-			"anonKey":        string(secret.Data["anon-key"]),
-			"serviceRoleKey": string(secret.Data["service-role-key"]),
-		},
-	}
-
-	// Locate chart
-	chartPath := r.ChartName
-	if r.ChartRepo != "" {
-		chartPath = fmt.Sprintf("%s/%s", r.ChartRepo, r.ChartName)
-	}
-
-	cp, err := installClient.ChartPathOptions.LocateChart(chartPath, settings)
-	if err != nil {
-		return fmt.Errorf("failed to locate chart: %w", err)
-	}
-
-	chartRequested, err := loader.Load(cp)
-	if err != nil {
-		return fmt.Errorf("failed to load chart: %w", err)
-	}
-
-	_, err = installClient.Run(chartRequested, values)
-	if err != nil {
-		return fmt.Errorf("failed to install chart: %w", err)
-	}
-
-	logger.Info("Installed Helm release", "namespace", namespace, "release", releaseName)
-	meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-		Type:               supacontrolv1alpha1.ConditionTypeHelmReleaseReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: instance.Generation,
-		Reason:             "HelmReleaseInstalled",
-		Message:            "Helm release installed successfully",
-	})
-
-	return nil
+	logger.V(1).Info("Cleanup Job still running", "jobName", jobName, "active", job.Status.Active)
+	return fmt.Errorf("cleanup Job still running")
 }
 
+// transitionToFailed moves the instance to Failed phase
 // ensureIngresses creates the ingress resources
 func (r *SupabaseInstanceReconciler) ensureIngresses(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
 	logger := ctrl.LoggerFrom(ctx)
@@ -692,32 +529,6 @@ func (r *SupabaseInstanceReconciler) createIngress(ctx context.Context, namespac
 	return nil
 }
 
-// uninstallHelmChart removes the Helm release
-func (r *SupabaseInstanceReconciler) uninstallHelmChart(ctx context.Context, namespace, releaseName string) error {
-	logger := ctrl.LoggerFrom(ctx)
-	settings := cli.New()
-	settings.SetNamespace(namespace)
-
-	actionConfig := new(action.Configuration)
-	if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", func(format string, v ...interface{}) {
-		logger.Info(fmt.Sprintf(format, v...))
-	}); err != nil {
-		return fmt.Errorf("failed to initialize helm action config: %w", err)
-	}
-
-	client := action.NewUninstall(actionConfig)
-	client.Wait = false
-	client.Timeout = 5 * time.Minute // Prevent indefinite hangs
-
-	_, err := client.Run(releaseName)
-	if err != nil {
-		return fmt.Errorf("failed to uninstall chart: %w", err)
-	}
-
-	return nil
-}
-
-// transitionToFailed moves the instance to Failed phase
 func (r *SupabaseInstanceReconciler) transitionToFailed(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance, errorMsg string) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
 	logger.Error(errors.New(errorMsg), "Instance provisioning failed", "projectName", instance.Spec.ProjectName)
@@ -749,6 +560,7 @@ func (r *SupabaseInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&supacontrolv1alpha1.SupabaseInstance{}).
+		Owns(&batchv1.Job{}).
 		Owns(&corev1.Namespace{}).
 		Owns(&corev1.Secret{}).
 		Owns(&networkingv1.Ingress{}).

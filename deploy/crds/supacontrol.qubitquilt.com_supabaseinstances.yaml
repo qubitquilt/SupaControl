@@ -64,8 +64,10 @@ spec:
                   enum:
                     - Pending
                     - Provisioning
+                    - ProvisioningInProgress
                     - Running
                     - Deleting
+                    - DeletingInProgress
                     - Failed
                 conditions:
                   description: Conditions represent the latest available observations of the instance's state
@@ -132,6 +134,12 @@ spec:
                   format: date-time
                 helmReleaseName:
                   description: HelmReleaseName is the name of the Helm release
+                  type: string
+                provisioningJobName:
+                  description: ProvisioningJobName is the name of the current/last provisioning Job
+                  type: string
+                cleanupJobName:
+                  description: CleanupJobName is the name of the current/last cleanup Job
                   type: string
       subresources:
         status: {}
