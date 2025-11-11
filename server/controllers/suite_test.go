@@ -206,20 +206,28 @@ func setJobSucceeded(ctx context.Context, t *testing.T, jobName string) {
 	// Job names follow pattern: supacontrol-provision-{instance-name} or supacontrol-cleanup-{instance-name}
 	// We need to create the supa-{instance-name} namespace that Helm would normally create
 	var instanceName string
-	if len(jobName) > len("supacontrol-provision-") && jobName[:len("supacontrol-provision-")] == "supacontrol-provision-" {
-		instanceName = jobName[len("supacontrol-provision-"):]
-	} else if len(jobName) > len("supacontrol-cleanup-") && jobName[:len("supacontrol-cleanup-")] == "supacontrol-cleanup-" {
-		instanceName = jobName[len("supacontrol-cleanup-"):]
+	if strings.HasPrefix(jobName, "supacontrol-provision-") {
+		instanceName = strings.TrimPrefix(jobName, "supacontrol-provision-")
+	} else if strings.HasPrefix(jobName, "supacontrol-cleanup-") {
+		instanceName = strings.TrimPrefix(jobName, "supacontrol-cleanup-")
 	}
 
 	if instanceName != "" {
 		instanceNs := &corev1.Namespace{}
 		instanceNs.Name = "supa-" + instanceName
-		// Try to create namespace - ignore if it already exists
+		t.Logf("Creating instance namespace: %s for job: %s", instanceNs.Name, jobName)
 		err = k8sClient.Create(ctx, instanceNs)
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			t.Logf("Warning: failed to create instance namespace %s: %v", instanceNs.Name, err)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") {
+				t.Logf("Instance namespace %s already exists (OK)", instanceNs.Name)
+			} else {
+				t.Fatalf("Failed to create instance namespace %s: %v", instanceNs.Name, err)
+			}
+		} else {
+			t.Logf("Successfully created instance namespace: %s", instanceNs.Name)
 		}
+	} else {
+		t.Logf("Warning: could not extract instance name from job name: %s", jobName)
 	}
 
 	job.Status.Succeeded = 1
