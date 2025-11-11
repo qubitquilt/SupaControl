@@ -181,38 +181,36 @@ Tests should be isolated and not depend on each other. Each test:
 
 ## CI/CD Integration
 
-### GitHub Actions Example
+### GitHub Actions
 
+Controller tests are **fully configured and running in CI**. The configuration is located in `.github/workflows/ci.yml` and includes:
+
+- Automatic setup of envtest binaries using `setup-envtest`
+- Test execution with race detection enabled
+- Coverage reporting to Codecov
+- Runs on all pushes to `main` and `develop` branches
+- Runs on all pull requests
+
+**Local developers** should follow the Prerequisites section above to set up their environment.
+
+### CI Configuration Details
+
+The CI workflow (`test-backend` job) includes:
 ```yaml
-name: Controller Tests
+- name: Install envtest binaries for controller tests
+  run: |
+    go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+    echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
-on: [push, pull_request]
+- name: Set up envtest environment
+  run: |
+    setup-envtest use 1.28.x -p path
+    echo "KUBEBUILDER_ASSETS=$(setup-envtest use 1.28.x -p path)" >> $GITHUB_ENV
 
-jobs:
-  controller-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-
-      - name: Install envtest binaries
-        run: |
-          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-          echo "KUBEBUILDER_ASSETS=$(setup-envtest use -p path 1.28.x)" >> $GITHUB_ENV
-
-      - name: Run controller tests
-        working-directory: ./server
-        run: go test -v -race ./controllers/... -coverprofile=coverage.out
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./server/coverage.out
-          flags: controllers
+- name: Run tests with coverage
+  run: |
+    cd server
+    go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 ```
 
 ## Test Maintenance
