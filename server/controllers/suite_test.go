@@ -2,8 +2,10 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,26 +37,20 @@ func TestMain(m *testing.M) {
 
 	// Bootstrap test environment
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
-		ErrorIfCRDPathMissing: false,
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "deploy", "crds")},
+		ErrorIfCRDPathMissing: true,
 	}
 
 	var err error
 	cfg, err = testEnv.Start()
 	if err != nil {
-		// TODO: Configure envtest binaries in CI/CD pipeline
 		// Controller tests require Kubernetes test binaries (etcd, kube-apiserver).
 		// These tests are skipped when envtest is not available.
 		//
-		// To enable these tests:
-		// 1. Install setup-envtest: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-		// 2. Download test binaries: setup-envtest use 1.28.x
-		// 3. Set environment: export KUBEBUILDER_ASSETS="$(setup-envtest use -p path 1.28.x)"
-		//
-		// See server/controllers/README_TEST.md for detailed setup instructions.
+		// In CI, envtest is configured automatically via the setup-envtest tool.
+		// For local development, see server/controllers/README_TEST.md for setup instructions.
 		//
 		// Skipping controller tests due to missing envtest binaries.
-		// This is expected in CI environments without kubebuilder installed.
 		logf.Log.Info("Skipping controller tests: envtest binaries not available", "error", err.Error())
 		envtestEnabled = false
 		os.Exit(0)
@@ -75,6 +71,16 @@ func TestMain(m *testing.M) {
 	}
 	if k8sClient == nil {
 		panic("k8s client is nil")
+	}
+
+	// Create the controller namespace for tests
+	// This is needed because the controller creates Jobs in this namespace
+	ctx := context.Background()
+	controllerNs := &corev1.Namespace{}
+	controllerNs.Name = "supacontrol-system"
+	err = k8sClient.Create(ctx, controllerNs)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create controller namespace: %v", err))
 	}
 
 	// Run tests
@@ -194,6 +200,34 @@ func setJobSucceeded(ctx context.Context, t *testing.T, jobName string) {
 	}, job)
 	if err != nil {
 		t.Fatalf("Failed to get Job: %v", err)
+	}
+
+	// Extract instance name from job name and create instance namespace
+	// Job names follow pattern: supacontrol-provision-{instance-name} or supacontrol-cleanup-{instance-name}
+	// We need to create the supa-{instance-name} namespace that Helm would normally create
+	var instanceName string
+	if strings.HasPrefix(jobName, "supacontrol-provision-") {
+		instanceName = strings.TrimPrefix(jobName, "supacontrol-provision-")
+	} else if strings.HasPrefix(jobName, "supacontrol-cleanup-") {
+		instanceName = strings.TrimPrefix(jobName, "supacontrol-cleanup-")
+	}
+
+	if instanceName != "" {
+		instanceNs := &corev1.Namespace{}
+		instanceNs.Name = "supa-" + instanceName
+		t.Logf("Creating instance namespace: %s for job: %s", instanceNs.Name, jobName)
+		err = k8sClient.Create(ctx, instanceNs)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") {
+				t.Logf("Instance namespace %s already exists (OK)", instanceNs.Name)
+			} else {
+				t.Fatalf("Failed to create instance namespace %s: %v", instanceNs.Name, err)
+			}
+		} else {
+			t.Logf("Successfully created instance namespace: %s", instanceNs.Name)
+		}
+	} else {
+		t.Logf("Warning: could not extract instance name from job name: %s", jobName)
 	}
 
 	job.Status.Succeeded = 1

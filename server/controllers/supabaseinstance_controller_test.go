@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,28 +213,9 @@ func TestReconcileProvisioningInProgress_HandlesJobSuccess(t *testing.T) {
 	}
 
 	jobName := current.Status.ProvisioningJobName
-	job := &batchv1.Job{}
-	err = k8sClient.Get(ctx, types.NamespacedName{
-		Name:      jobName,
-		Namespace: ControllerNamespace,
-	}, job)
-	if err != nil {
-		t.Fatalf("Job not found: %v", err)
-	}
 
-	// Simulate Job success
-	job.Status.Succeeded = 1
-	job.Status.Active = 0
-	job.Status.Conditions = []batchv1.JobCondition{
-		{
-			Type:   batchv1.JobComplete,
-			Status: corev1.ConditionTrue,
-		},
-	}
-	err = k8sClient.Status().Update(ctx, job)
-	if err != nil {
-		t.Fatalf("Failed to update Job status: %v", err)
-	}
+	// Simulate Job success (also creates instance namespace)
+	setJobSucceeded(ctx, t, jobName)
 
 	// Reconcile to detect Job success
 	result, err := reconciler.Reconcile(ctx, req)
@@ -399,23 +381,9 @@ func TestReconcileDelete_CreatesCleanupJob(t *testing.T) {
 		t.Fatal("Instance not found")
 	}
 
-	// Simulate successful provisioning
+	// Simulate successful provisioning (also creates instance namespace)
 	jobName := current.Status.ProvisioningJobName
-	job := &batchv1.Job{}
-	err = k8sClient.Get(ctx, types.NamespacedName{
-		Name:      jobName,
-		Namespace: ControllerNamespace,
-	}, job)
-	if err != nil {
-		t.Fatalf("Job not found: %v", err)
-	}
-	job.Status.Succeeded = 1
-	job.Status.Conditions = []batchv1.JobCondition{
-		{Type: batchv1.JobComplete, Status: corev1.ConditionTrue},
-	}
-	if err := k8sClient.Status().Update(ctx, job); err != nil {
-		t.Fatalf("Failed to update Job status: %v", err)
-	}
+	setJobSucceeded(ctx, t, jobName)
 
 	if _, err := reconciler.Reconcile(ctx, req); err != nil {
 		t.Fatalf("Failed to transition to Running: %v", err)
@@ -504,18 +472,8 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 
 	// Transition to Running (simulate successful provision)
 	current := getInstanceState(ctx, t, instance.Name)
-	if current != nil {
-		jobName := current.Status.ProvisioningJobName
-		job := &batchv1.Job{}
-		if k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ControllerNamespace}, job) == nil {
-			job.Status.Succeeded = 1
-			job.Status.Conditions = []batchv1.JobCondition{
-				{Type: batchv1.JobComplete, Status: corev1.ConditionTrue},
-			}
-			if err := k8sClient.Status().Update(ctx, job); err != nil {
-				t.Fatalf("Failed to update Job status: %v", err)
-			}
-		}
+	if current != nil && current.Status.ProvisioningJobName != "" {
+		setJobSucceeded(ctx, t, current.Status.ProvisioningJobName)
 	}
 	if _, err := reconciler.Reconcile(ctx, req); err != nil {
 		t.Fatalf("Failed to reconcile Running state: %v", err)
@@ -527,8 +485,10 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 		t.Fatal("Instance not found")
 	}
 	_ = k8sClient.Delete(ctx, current)
-	if _, err := reconciler.Reconcile(ctx, req); err != nil {
-		t.Fatalf("Failed to create cleanup Job: %v", err)
+	if _, err := reconciler.Reconcile(ctx, req); err == nil {
+		t.Fatal("Expected error indicating cleanup Job created")
+	} else if !strings.Contains(err.Error(), "cleanup Job created, waiting for completion") {
+		t.Fatalf("Expected 'cleanup Job created' error, got: %v", err)
 	}
 
 	// Get cleanup Job and make it active
@@ -838,18 +798,8 @@ func TestReconcileRunning_PeriodicHealthChecks(t *testing.T) {
 
 	// Transition to Running
 	current := getInstanceState(ctx, t, instance.Name)
-	if current != nil {
-		jobName := current.Status.ProvisioningJobName
-		job := &batchv1.Job{}
-		if k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ControllerNamespace}, job) == nil {
-			job.Status.Succeeded = 1
-			job.Status.Conditions = []batchv1.JobCondition{
-				{Type: batchv1.JobComplete, Status: corev1.ConditionTrue},
-			}
-			if err := k8sClient.Status().Update(ctx, job); err != nil {
-				t.Fatalf("Failed to update Job status: %v", err)
-			}
-		}
+	if current != nil && current.Status.ProvisioningJobName != "" {
+		setJobSucceeded(ctx, t, current.Status.ProvisioningJobName)
 	}
 	if _, err := reconciler.Reconcile(ctx, req); err != nil {
 		t.Fatalf("Failed to reconcile Running state: %v", err)
