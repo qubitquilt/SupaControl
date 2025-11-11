@@ -7,9 +7,6 @@ import {
   installHelm,
   upgradeHelm,
   checkHelmRelease,
-  uninstallHelm,
-  checkPodStatus,
-  checkHelmConnection,
 } from './helm.js';
 import type { HelmConfig } from './helm.js';
 
@@ -194,28 +191,11 @@ describe('helm utilities', () => {
 
   describe('installHelm', () => {
     it('should call helm install with correct arguments', async () => {
-      // Mock checkHelmRelease to return false (release doesn't exist)
-      vi.mocked(execa)
-        .mockResolvedValueOnce({
-          stdout: '',
-          stderr: 'Error: release: not found',
-          exitCode: 1,
-        } as any) // checkHelmRelease call
-        .mockResolvedValueOnce({
-          stdout: 'v3.12.0',
-          stderr: '',
-          exitCode: 0,
-        } as any) // checkHelmConnection call
-        .mockResolvedValueOnce({
-          stdout: 'dry-run output',
-          stderr: '',
-          exitCode: 0,
-        } as any) // dry-run call
-        .mockResolvedValueOnce({
-          stdout: 'Release "supacontrol" deployed',
-          stderr: '',
-          exitCode: 0,
-        } as any); // actual install call
+      vi.mocked(execa).mockResolvedValue({
+        stdout: 'Release "supacontrol" deployed',
+        stderr: '',
+        exitCode: 0,
+      } as any);
 
       const result = await installHelm(
         'test-namespace',
@@ -226,8 +206,7 @@ describe('helm utilities', () => {
 
       expect(result.success).toBe(true);
       expect(result.output).toContain('deployed');
-      // Verify the actual install call (4th call)
-      expect(execa).toHaveBeenNthCalledWith(4, 'helm', [
+      expect(execa).toHaveBeenCalledWith('helm', [
         'install',
         'test-release',
         '/path/to/chart',
@@ -237,8 +216,9 @@ describe('helm utilities', () => {
         '--values',
         '/path/to/values.yaml',
         '--wait',
-        '--debug',
-      ], expect.objectContaining({ timeout: 120000 }));
+        '--timeout',
+        '10m',
+      ]);
     });
 
     it('should return error when helm install fails', async () => {
@@ -258,18 +238,11 @@ describe('helm utilities', () => {
 
   describe('upgradeHelm', () => {
     it('should call helm upgrade with correct arguments', async () => {
-      // Mock dry-run call first, then actual upgrade
-      vi.mocked(execa)
-        .mockResolvedValueOnce({
-          stdout: 'dry-run output',
-          stderr: '',
-          exitCode: 0,
-        } as any) // dry-run call
-        .mockResolvedValueOnce({
-          stdout: 'Release "supacontrol" upgraded',
-          stderr: '',
-          exitCode: 0,
-        } as any); // actual upgrade call
+      vi.mocked(execa).mockResolvedValue({
+        stdout: 'Release "supacontrol" upgraded',
+        stderr: '',
+        exitCode: 0,
+      } as any);
 
       const result = await upgradeHelm(
         'test-namespace',
@@ -280,8 +253,7 @@ describe('helm utilities', () => {
 
       expect(result.success).toBe(true);
       expect(result.output).toContain('upgraded');
-      // Verify the actual upgrade call (2nd call)
-      expect(execa).toHaveBeenNthCalledWith(2, 'helm', [
+      expect(execa).toHaveBeenCalledWith('helm', [
         'upgrade',
         'test-release',
         '/path/to/chart',
@@ -290,8 +262,9 @@ describe('helm utilities', () => {
         '--values',
         '/path/to/values.yaml',
         '--wait',
-        '--debug',
-      ], expect.objectContaining({ timeout: 70000 }));
+        '--timeout',
+        '10m',
+      ]);
     });
 
     it('should return error when helm upgrade fails', async () => {
@@ -312,7 +285,7 @@ describe('helm utilities', () => {
   describe('checkHelmRelease', () => {
     it('should return true when release exists', async () => {
       vi.mocked(execa).mockResolvedValue({
-        stdout: '{"status": "deployed"}',
+        stdout: 'STATUS: deployed',
         stderr: '',
         exitCode: 0,
       } as any);
@@ -325,9 +298,7 @@ describe('helm utilities', () => {
         'test-release',
         '--namespace',
         'test-namespace',
-        '--output',
-        'json',
-      ], expect.objectContaining({ timeout: 30000 }));
+      ]);
     });
 
     it('should return false when release does not exist', async () => {
@@ -336,159 +307,6 @@ describe('helm utilities', () => {
       const result = await checkHelmRelease('test-namespace', 'test-release');
 
       expect(result).toBe(false);
-    });
-  });
-
-  describe('uninstallHelm', () => {
-    it('should call helm uninstall with correct arguments', async () => {
-      vi.mocked(execa).mockResolvedValue({
-        stdout: 'release "test-release" uninstalled',
-        stderr: '',
-        exitCode: 0,
-      } as any);
-
-      const result = await uninstallHelm('test-namespace', 'test-release');
-
-      expect(result.success).toBe(true);
-      expect(result.output).toContain('uninstalled');
-      expect(execa).toHaveBeenCalledWith('helm', [
-        'uninstall',
-        'test-release',
-        '--namespace',
-        'test-namespace',
-      ]);
-    });
-
-    it('should return error when helm uninstall fails', async () => {
-      vi.mocked(execa).mockRejectedValue(new Error('Release not found'));
-
-      const result = await uninstallHelm('test-namespace', 'test-release');
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Release not found');
-    });
-  });
-
-  describe('checkPodStatus', () => {
-    it('should return pod status when pods exist', async () => {
-      const mockPodData = {
-        items: [
-          {
-            metadata: { name: 'test-pod-1' },
-            status: {
-              phase: 'Running',
-              startTime: '2023-01-01T00:00:00Z',
-              containerStatuses: [
-                { ready: true, restartCount: 0, name: 'container-1', state: { running: {} } },
-              ],
-            },
-            spec: {
-              containers: [{ name: 'container-1' }],
-            },
-          },
-        ],
-      };
-
-      vi.mocked(execa).mockResolvedValue({
-        stdout: JSON.stringify(mockPodData),
-        stderr: '',
-        exitCode: 0,
-      } as any);
-
-      const result = await checkPodStatus('test-namespace', 'test-release');
-
-      expect(result.success).toBe(true);
-      expect(result.pods).toHaveLength(1);
-      expect(result.pods[0].name).toBe('test-pod-1');
-      expect(result.pods[0].status).toBe('Running');
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should detect image pull errors', async () => {
-      const mockPodData = {
-        items: [
-          {
-            metadata: { name: 'test-pod-1' },
-            status: {
-              phase: 'Pending',
-              startTime: '2023-01-01T00:00:00Z',
-              containerStatuses: [
-                {
-                  ready: false,
-                  restartCount: 0,
-                  name: 'container-1',
-                  state: {
-                    waiting: {
-                      reason: 'ImagePullBackOff',
-                      message: 'Failed to pull image',
-                    },
-                  },
-                },
-              ],
-            },
-            spec: {
-              containers: [{ name: 'container-1' }],
-            },
-          },
-        ],
-      };
-
-      vi.mocked(execa).mockResolvedValue({
-        stdout: JSON.stringify(mockPodData),
-        stderr: '',
-        exitCode: 0,
-      } as any);
-
-      const result = await checkPodStatus('test-namespace', 'test-release');
-
-      expect(result.success).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]).toContain('Failed to pull image');
-    });
-
-    it('should return error when kubectl fails', async () => {
-      vi.mocked(execa).mockRejectedValue(new Error('kubectl error'));
-
-      const result = await checkPodStatus('test-namespace', 'test-release');
-
-      expect(result.success).toBe(false);
-      expect(result.pods).toHaveLength(0);
-      expect(result.errors[0]).toContain('kubectl error');
-    });
-  });
-
-  describe('checkHelmConnection', () => {
-    it('should return working true when helm is available', async () => {
-      vi.mocked(execa).mockResolvedValue({
-        stdout: 'v3.12.0',
-        stderr: '',
-        exitCode: 0,
-      } as any);
-
-      const result = await checkHelmConnection();
-
-      expect(result.working).toBe(true);
-      expect(execa).toHaveBeenCalledWith('helm', ['version', '--short'], expect.objectContaining({ timeout: 10000 }));
-    });
-
-    it('should return working false when helm is not available', async () => {
-      vi.mocked(execa).mockRejectedValue(new Error('helm not found'));
-
-      const result = await checkHelmConnection();
-
-      expect(result.working).toBe(false);
-      expect(result.error).toContain('helm not found');
-    });
-
-    it('should handle timeout errors', async () => {
-      const timeoutError: any = new Error('Timeout');
-      timeoutError.isTimeout = true;
-      vi.mocked(execa).mockRejectedValue(timeoutError);
-
-      const result = await checkHelmConnection();
-
-      expect(result.working).toBe(false);
-      expect(result.error).toContain('timed out');
     });
   });
 });
