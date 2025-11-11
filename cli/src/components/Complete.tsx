@@ -139,7 +139,7 @@ export const Complete: React.FC<CompleteProps> = ({ config, success }) => {
         <Box marginTop={1} flexDirection="column" paddingX={2}>
           <Text dimColor>• View logs: kubectl logs -n {config.namespace} -l app.kubernetes.io/name=supacontrol -f</Text>
           <Text dimColor>• Check status: helm status {config.releaseName} -n {config.namespace}</Text>
-          <Text dimColor>• Port forward: kubectl port-forward -n {config.namespace} svc/{config.releaseName} 8080:8080</Text>
+          <Text dimColor>• Port forward: kubectl port-forward -n {config.namespace} svc/{config.releaseName} 8091:8091</Text>
         </Box>
       </Box>
 

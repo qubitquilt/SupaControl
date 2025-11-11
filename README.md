@@ -154,10 +154,16 @@ Create a `values.yaml` file:
 
 ```yaml
 config:
-  jwtSecret: "your-super-secret-jwt-key-here"
+  # REQUIRED: Set a secure JWT secret for authentication
+  jwtSecret: ""
 
   database:
-    password: "secure-db-password"
+    host: "supacontrol-postgresql"
+    port: "5432"
+    user: "supacontrol"
+    # REQUIRED: Set a secure password for the database user
+    password: ""
+    name: "supacontrol"
 
   kubernetes:
     ingressClass: "nginx"
@@ -176,8 +182,10 @@ ingress:
         - supacontrol.yourdomain.com
 
 postgresql:
+  enabled: true
   auth:
-    password: "secure-db-password"
+    # REQUIRED: Set a secure password for the PostgreSQL database (or leave empty for auto-generation)
+    password: ""
 ```
 
 Install the Helm chart:
@@ -403,7 +411,7 @@ docker build -t supacontrol/server:latest .
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SERVER_PORT` | HTTP server port | `8080` |
+| `SERVER_PORT` | HTTP server port | `8091` |
 | `SERVER_HOST` | HTTP server host | `0.0.0.0` |
 | `DB_HOST` | PostgreSQL host | `localhost` |
 | `DB_PORT` | PostgreSQL port | `5432` |

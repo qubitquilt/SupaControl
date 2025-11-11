@@ -32,8 +32,8 @@ func TestGetServerAddr(t *testing.T) {
 		{
 			name:       "default",
 			serverHost: "0.0.0.0",
-			serverPort: "8080",
-			want:       "0.0.0.0:8080",
+			serverPort: "8091",
+			want:       "0.0.0.0:8091",
 		},
 		{
 			name:       "custom port",
@@ -150,8 +150,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 
 	// Check defaults
-	if cfg.ServerPort != "8080" {
-		t.Errorf("ServerPort = %v, want 8080", cfg.ServerPort)
+	if cfg.ServerPort != "8091" {
+		t.Errorf("ServerPort = %v, want 8091", cfg.ServerPort)
 	}
 
 	if cfg.ServerHost != "0.0.0.0" {

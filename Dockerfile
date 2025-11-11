@@ -1,5 +1,5 @@
 # Build stage for Go backend
-FROM golang:1.21-alpine AS go-builder
+FROM golang:1.24-alpine AS go-builder
 
 WORKDIR /build
 
@@ -12,7 +12,8 @@ COPY pkg/api-types/go.mod ./pkg/api-types/
 
 # Download dependencies
 WORKDIR /build/server
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Copy source code
 WORKDIR /build
@@ -21,7 +22,8 @@ COPY pkg/ ./pkg/
 
 # Build the application
 WORKDIR /build/server
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o supacontrol main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o supacontrol main.go
 
 # Build stage for React frontend
 FROM node:18-alpine AS ui-builder
@@ -57,7 +59,7 @@ COPY --from=go-builder /build/server/internal/db/migrations ./internal/db/migrat
 COPY --from=ui-builder /build/dist ../ui/dist
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8091
 
 # Run the application
 CMD ["./supacontrol"]
