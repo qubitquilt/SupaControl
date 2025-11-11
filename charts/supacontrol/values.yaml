@@ -63,13 +63,15 @@ affinity: {}
 
 # Application Configuration
 config:
-  jwtSecret: "super-secret-jwt-key-for-supacontrol-2025"  # Set secure JWT secret
+  # REQUIRED: Set a secure JWT secret for authentication
+  jwtSecret: ""
 
   database:
     host: "supacontrol-postgresql"  # Use internal PostgreSQL service
     port: "5432"
     user: "supacontrol"
-    password: "pPjvyAIPj^N6podkgRho!A4LDW3DSdnG"  # REQUIRED: Set database password
+    # REQUIRED: Set a secure password for the database user
+    password: ""
     name: "supacontrol"
 
   kubernetes:
@@ -91,7 +93,8 @@ postgresql:
     tag: "14.11.0"  # Use specific stable version
   auth:
     username: supacontrol
-    password: "pPjvyAIPj^N6podkgRho!A4LDW3DSdnG"
+    # REQUIRED: Set a secure password for the PostgreSQL database (or leave empty for auto-generation)
+    password: ""
     database: supacontrol
   primary:
     persistence:

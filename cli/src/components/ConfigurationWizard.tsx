@@ -49,7 +49,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
     releaseName: 'supacontrol',
     ingressClass: 'nginx',
     ingressDomain: 'supabase.example.com',
-    installDatabase: false, // Start with false to test external database flow
+    installDatabase: true, // Default to true for better out-of-box experience
     tlsEnabled: true,
     certManagerIssuer: 'letsencrypt-prod',
     dbPort: '5432',
@@ -100,18 +100,12 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
   const confirmAndContinue = () => {
     // Validate required fields for external database
     if (!config.installDatabase) {
-      if (!config.dbHost || !config.dbUser || !config.dbName || !config.dbPassword) {
-        // Go back to the first missing field
-        if (!config.dbHost) {
-          setStep('dbHost');
-        } else if (!config.dbUser) {
-          setStep('dbUser');
-        } else if (!config.dbName) {
-          setStep('dbName');
-        } else {
-          setStep('dbPassword');
+      const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
+      for (const field of requiredDbFields) {
+        if (!config[field as keyof typeof config]) {
+          setStep(field);
+          return;
         }
-        return;
       }
     }
     

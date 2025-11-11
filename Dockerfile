@@ -13,7 +13,7 @@ COPY pkg/api-types/go.mod ./pkg/api-types/
 # Download dependencies
 WORKDIR /build/server
 RUN --mount=type=cache,target=/go/pkg/mod \
-    GOPROXY=direct GOSUMDB=off go mod download
+    go mod download
 
 # Copy source code
 WORKDIR /build
@@ -23,7 +23,7 @@ COPY pkg/ ./pkg/
 # Build the application
 WORKDIR /build/server
 RUN --mount=type=cache,target=/go/pkg/mod \
-    GOPROXY=direct GOSUMDB=off CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o supacontrol main.go
+    CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o supacontrol main.go
 
 # Build stage for React frontend
 FROM node:18-alpine AS ui-builder
