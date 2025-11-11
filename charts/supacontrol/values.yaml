@@ -16,6 +16,14 @@ serviceAccount:
   annotations: {}
   name: ""
 
+# Provisioner ServiceAccount for Jobs
+# Jobs created by the controller use this ServiceAccount to provision/cleanup instances
+provisioner:
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: "supacontrol-provisioner"
+
 podAnnotations: {}
 
 podSecurityContext: {}
