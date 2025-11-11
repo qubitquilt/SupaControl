@@ -35,26 +35,20 @@ func TestMain(m *testing.M) {
 
 	// Bootstrap test environment
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
-		ErrorIfCRDPathMissing: false,
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "deploy", "crds")},
+		ErrorIfCRDPathMissing: true,
 	}
 
 	var err error
 	cfg, err = testEnv.Start()
 	if err != nil {
-		// TODO: Configure envtest binaries in CI/CD pipeline
 		// Controller tests require Kubernetes test binaries (etcd, kube-apiserver).
 		// These tests are skipped when envtest is not available.
 		//
-		// To enable these tests:
-		// 1. Install setup-envtest: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-		// 2. Download test binaries: setup-envtest use 1.28.x
-		// 3. Set environment: export KUBEBUILDER_ASSETS="$(setup-envtest use -p path 1.28.x)"
-		//
-		// See server/controllers/README_TEST.md for detailed setup instructions.
+		// In CI, envtest is configured automatically via the setup-envtest tool.
+		// For local development, see server/controllers/README_TEST.md for setup instructions.
 		//
 		// Skipping controller tests due to missing envtest binaries.
-		// This is expected in CI environments without kubebuilder installed.
 		logf.Log.Info("Skipping controller tests: envtest binaries not available", "error", err.Error())
 		envtestEnabled = false
 		os.Exit(0)
