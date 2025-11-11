@@ -39,9 +39,6 @@
   "overrides": [
     {
       "files": ["**/*.test.{js,jsx}", "**/*.spec.{js,jsx}", "**/test/**/*.{js,jsx}"],
-      "env": {
-        "vitest-globals/env": true
-      },
       "globals": {
         "vi": "readonly",
         "global": "readonly",
