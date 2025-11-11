@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -484,8 +485,10 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 		t.Fatal("Instance not found")
 	}
 	_ = k8sClient.Delete(ctx, current)
-	if _, err := reconciler.Reconcile(ctx, req); err != nil {
-		t.Fatalf("Failed to create cleanup Job: %v", err)
+	if _, err := reconciler.Reconcile(ctx, req); err == nil {
+		t.Fatal("Expected error indicating cleanup Job created")
+	} else if !strings.Contains(err.Error(), "cleanup Job created, waiting for completion") {
+		t.Fatalf("Expected 'cleanup Job created' error, got: %v", err)
 	}
 
 	// Get cleanup Job and make it active
