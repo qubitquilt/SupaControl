@@ -203,19 +203,17 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
           setInstallAction('upgrade');
           setSteps(prev => prev.map(s =>
             s.step === 'install'
-              ? { ...s, message: 'Upgrading SupaControl' }
+              ? { ...s, message: 'Upgrading SupaControl', status: 'completed' }
               : s
           ));
-          updateStep('install', 'completed');
           console.log('✓ Upgrade completed successfully');
         } else {
           setInstallAction('install');
           setSteps(prev => prev.map(s =>
             s.step === 'install'
-              ? { ...s, message: 'Installing SupaControl' }
+              ? { ...s, message: 'Installing SupaControl', status: 'completed' }
               : s
           ));
-          updateStep('install', 'completed');
           console.log('✓ Installation completed successfully');
         }
 
