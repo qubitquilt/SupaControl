@@ -64,19 +64,22 @@ func (r *SupabaseInstanceReconciler) createProvisioningJob(ctx context.Context, 
 			Name:      jobName,
 			Namespace: ControllerNamespace,
 			Labels: map[string]string{
-				JobInstanceLabel:            instance.Spec.ProjectName,
-				JobOperationLabel:           OperationProvision,
-				"app.kubernetes.io/name":    "supacontrol",
+				JobInstanceLabel:              instance.Spec.ProjectName,
+				JobOperationLabel:             OperationProvision,
+				"app.kubernetes.io/name":      "supacontrol",
 				"app.kubernetes.io/component": "provisioner",
 			},
 			Annotations: map[string]string{
 				"supacontrol.io/instance-uid": string(instance.UID),
 			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(instance, supacontrolv1alpha1.GroupVersion.WithKind("SupabaseInstance")),
+			},
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit:          pointer.Int32(3),              // Retry up to 3 times
-			ActiveDeadlineSeconds: pointer.Int64(900),            // 15 minute timeout
-			TTLSecondsAfterFinished: pointer.Int32(3600),         // Clean up after 1 hour
+			BackoffLimit:            pointer.Int32(3),    // Retry up to 3 times
+			ActiveDeadlineSeconds:   pointer.Int64(900),  // 15 minute timeout
+			TTLSecondsAfterFinished: pointer.Int32(3600), // Clean up after 1 hour
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -89,8 +92,8 @@ func (r *SupabaseInstanceReconciler) createProvisioningJob(ctx context.Context, 
 					RestartPolicy:      corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
-							Name:  "provisioner",
-							Image: ProvisionerImage,
+							Name:    "provisioner",
+							Image:   ProvisionerImage,
 							Command: []string{"/bin/sh", "-c"},
 							Args: []string{`
 set -euo pipefail
@@ -235,19 +238,22 @@ func (r *SupabaseInstanceReconciler) createCleanupJob(ctx context.Context, insta
 			Name:      jobName,
 			Namespace: ControllerNamespace,
 			Labels: map[string]string{
-				JobInstanceLabel:            instance.Spec.ProjectName,
-				JobOperationLabel:           OperationCleanup,
-				"app.kubernetes.io/name":    "supacontrol",
+				JobInstanceLabel:              instance.Spec.ProjectName,
+				JobOperationLabel:             OperationCleanup,
+				"app.kubernetes.io/name":      "supacontrol",
 				"app.kubernetes.io/component": "provisioner",
 			},
 			Annotations: map[string]string{
 				"supacontrol.io/instance-uid": string(instance.UID),
 			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(instance, supacontrolv1alpha1.GroupVersion.WithKind("SupabaseInstance")),
+			},
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit:          pointer.Int32(2),              // Retry up to 2 times
-			ActiveDeadlineSeconds: pointer.Int64(600),            // 10 minute timeout
-			TTLSecondsAfterFinished: pointer.Int32(3600),         // Clean up after 1 hour
+			BackoffLimit:            pointer.Int32(2),    // Retry up to 2 times
+			ActiveDeadlineSeconds:   pointer.Int64(600),  // 10 minute timeout
+			TTLSecondsAfterFinished: pointer.Int32(3600), // Clean up after 1 hour
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -260,8 +266,8 @@ func (r *SupabaseInstanceReconciler) createCleanupJob(ctx context.Context, insta
 					RestartPolicy:      corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
-							Name:  "cleanup",
-							Image: ProvisionerImage,
+							Name:    "cleanup",
+							Image:   ProvisionerImage,
 							Command: []string{"/bin/sh", "-c"},
 							Args: []string{`
 set -euo pipefail

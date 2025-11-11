@@ -100,10 +100,10 @@ Similar patterns used by:
                       ▼
 ┌────────────────────────────────────────────────────────────┐
 │                 Kubernetes Job                             │
-│  Name: supacontrol-provision-{instance-name}-{hash}        │
-│  Container: Uses Helm CLI image                            │
-│  Command: /scripts/provision.sh                            │
-│  Mounts: Secret with config, ServiceAccount with RBAC     │
+│  Name: supacontrol-provision-{instance-name}               │
+│  Container: Uses Helm CLI image (alpine/helm:3.13.0)      │
+│  Command: Embedded shell script                            │
+│  ServiceAccount: supacontrol-provisioner (with RBAC)      │
 │  Limits: CPU=500m, Memory=512Mi, Timeout=15min             │
 └────────────────────┬───────────────────────────────────────┘
                      │
@@ -236,45 +236,78 @@ func (r *SupabaseInstanceReconciler) checkProvisioningJobStatus(ctx context.Cont
 }
 ```
 
-### 3. Provisioning Script (provision.sh)
+### 3. Provisioning Script
 
-Mounted as ConfigMap in Job Pod:
+Embedded in Job container Args:
 
 ```bash
 #!/bin/sh
 set -euo pipefail
 
-echo "Starting provisioning for instance: $INSTANCE_NAME"
+echo "========================================"
+echo "SupaControl Provisioning Job"
+echo "Instance: $INSTANCE_NAME"
+echo "Namespace: $NAMESPACE"
+echo "========================================"
 
 # Step 1: Create namespace
+echo "[1/5] Creating namespace: $NAMESPACE"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace "$NAMESPACE" \
+  app.kubernetes.io/managed-by=supacontrol \
+  supacontrol.io/instance="$INSTANCE_NAME" \
+  --overwrite
 
 # Step 2: Generate and create secrets
+echo "[2/5] Generating secrets"
+POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d '\n')
+JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')
+ANON_KEY=$(openssl rand -base64 32 | tr -d '\n')
+SERVICE_ROLE_KEY=$(openssl rand -base64 32 | tr -d '\n')
+
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Secret
 metadata:
   name: $INSTANCE_NAME-secrets
   namespace: $NAMESPACE
+  labels:
+    app.kubernetes.io/managed-by: supacontrol
+    supacontrol.io/instance: $INSTANCE_NAME
 stringData:
-  postgres-password: "$(openssl rand -base64 32)"
-  jwt-secret: "$(openssl rand -base64 64)"
-  anon-key: "$(openssl rand -base64 32)"
-  service-role-key: "$(openssl rand -base64 32)"
+  postgres-password: "$POSTGRES_PASSWORD"
+  jwt-secret: "$JWT_SECRET"
+  anon-key: "$ANON_KEY"
+  service-role-key: "$SERVICE_ROLE_KEY"
 EOF
 
-# Step 3: Add Helm repo
-helm repo add supabase "$CHART_REPO"
+echo "[2/5] Secrets created successfully"
+
+# Step 3: Add Helm repository
+echo "[3/5] Adding Helm repository: $CHART_REPO"
+helm repo add supabase-community "$CHART_REPO" || true
 helm repo update
 
 # Step 4: Install Helm chart
-helm install "$INSTANCE_NAME" supabase/"$CHART_NAME" \
+echo "[4/5] Installing Helm chart: $CHART_NAME (version: $CHART_VERSION)"
+helm install "$INSTANCE_NAME" supabase-community/"$CHART_NAME" \
   --namespace "$NAMESPACE" \
   --version "$CHART_VERSION" \
+  --set postgresql.auth.postgresPassword="$POSTGRES_PASSWORD" \
+  --set jwt.secret="$JWT_SECRET" \
+  --set jwt.anonKey="$ANON_KEY" \
+  --set jwt.serviceRoleKey="$SERVICE_ROLE_KEY" \
   --wait \
   --timeout 10m
 
-echo "Provisioning complete for instance: $INSTANCE_NAME"
+echo "[4/5] Helm chart installed successfully"
+
+# Step 5: Report completion
+echo "[5/5] Provisioning complete!"
+echo "========================================"
+echo "Instance '$INSTANCE_NAME' is now running"
+echo "Namespace: $NAMESPACE"
+echo "========================================"
 ```
 
 ### 4. Cleanup Job (Deletion)
