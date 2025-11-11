@@ -449,7 +449,7 @@ func TestReconcileDelete_CreatesCleanupJob(t *testing.T) {
 
 	// Verify instance transitioned to Deleting or DeletingInProgress
 	if current.Status.Phase != supacontrolv1alpha1.PhaseDeleting &&
-	   current.Status.Phase != supacontrolv1alpha1.PhaseDeletingInProgress {
+		current.Status.Phase != supacontrolv1alpha1.PhaseDeletingInProgress {
 		t.Errorf("Expected phase Deleting or DeletingInProgress, got %s", current.Status.Phase)
 	}
 
