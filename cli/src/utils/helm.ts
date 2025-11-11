@@ -365,7 +365,7 @@ export async function checkPodStatus(namespace: string, releaseName: string): Pr
       const podStatus: PodStatus = {
         name: item.metadata.name,
         status: item.status.phase,
-        ready: `${item.status.readyConditions?.filter((c: any) => c.status === 'True').length || 0}/${item.spec.containers?.length || 0}`,
+        ready: `${item.status.containerStatuses?.filter((cs: any) => cs.ready).length || 0}/${item.spec.containers?.length || 0}`,
         restarts: item.status.containerStatuses?.reduce((sum: number, cs: any) => sum + (cs.restartCount || 0), 0) || 0,
         age: item.status.startTime ? new Date(item.status.startTime).toLocaleString() : 'Unknown',
       };
