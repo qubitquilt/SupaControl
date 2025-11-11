@@ -304,7 +304,8 @@ func (r *SupabaseInstanceReconciler) transitionToRunning(ctx context.Context, in
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	// Requeue with delay for periodic health checks
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 // reconcileRunning handles the running phase (health checks, drift detection)
@@ -550,7 +551,8 @@ func (r *SupabaseInstanceReconciler) transitionToFailed(ctx context.Context, ins
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	// Requeue with delay for periodic monitoring of failed state
+	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager
