@@ -360,7 +360,7 @@ describe('Login Component', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle empty API response', async () => {
+    it('should treat missing token as login failure', async () => {
       const user = userEvent.setup();
 
       api.authAPI.login.mockResolvedValue({ data: {} });
@@ -376,8 +376,13 @@ describe('Login Component', () => {
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(localStorage.setItem).toHaveBeenCalledWith('token', undefined);
+        expect(screen.getByText('Invalid response from server. Please try again.')).toBeInTheDocument();
       });
+
+      // Should not store undefined token
+      expect(localStorage.setItem).not.toHaveBeenCalledWith('token', undefined);
+      // Should not call onLogin callback
+      expect(mockOnLogin).not.toHaveBeenCalled();
     });
 
     it('should handle whitespace in username and password', async () => {

@@ -9,14 +9,10 @@ const localStorageMock = {
 };
 global.localStorage = localStorageMock;
 
-// Mock fetch
-global.fetch = vi.fn();
-
 // Reset mocks before each test
 beforeEach(() => {
   localStorageMock.getItem.mockClear();
   localStorageMock.setItem.mockClear();
   localStorageMock.removeItem.mockClear();
   localStorageMock.clear.mockClear();
-  global.fetch.mockClear();
 });
