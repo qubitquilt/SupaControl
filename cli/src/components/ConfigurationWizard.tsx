@@ -432,35 +432,51 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
           </Box>
           
           {/* Validation warnings */}
-          {!config.installDatabase && (!config.dbHost || !config.dbUser || !config.dbName || !config.dbPassword) && (
-            <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="red" paddingX={2} paddingY={1}>
-              <Text bold color="red">
-                ⚠️  Incomplete External Database Configuration
-              </Text>
-              <Box marginTop={1}>
-                <Text color="red">
-                  The following fields are required for external database:
+          {!config.installDatabase && (() => {
+            const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
+            const missingFields = requiredDbFields.filter(field => !config[field as keyof typeof config]);
+            
+            if (missingFields.length === 0) return null;
+            
+            const fieldDescriptions: Record<string, string> = {
+              'dbHost': 'Database host address',
+              'dbUser': 'Database username',
+              'dbName': 'Database name',
+              'dbPassword': 'Database password'
+            };
+            
+            return (
+              <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="red" paddingX={2} paddingY={1}>
+                <Text bold color="red">
+                  ⚠️  Incomplete External Database Configuration
                 </Text>
+                <Box marginTop={1}>
+                  <Text color="red">
+                    The following fields are required for external database:
+                  </Text>
+                </Box>
+                {missingFields.map(field => (
+                  <Text key={field} color="red">• {fieldDescriptions[field]}</Text>
+                ))}
+                <Box marginTop={1}>
+                  <Text color="red">Press Enter to go to database configuration...</Text>
+                </Box>
+                <Box marginTop={1}>
+                  <Text color="yellow">Note: You can go back to fix any step</Text>
+                </Box>
               </Box>
-              {!config.dbHost && <Text color="red">• Database host address</Text>}
-              {!config.dbUser && <Text color="red">• Database username</Text>}
-              {!config.dbName && <Text color="red">• Database name</Text>}
-              {!config.dbPassword && <Text color="red">• Database password</Text>}
-              <Box marginTop={1}>
-                <Text color="red">Press Enter to go to database configuration...</Text>
-              </Box>
-              <Box marginTop={1}>
-                <Text color="yellow">Note: You can go back to fix any step</Text>
-              </Box>
-            </Box>
-          )}
+            );
+          })()}
           
           <Box marginTop={1}>
             <Text>
-              {!config.installDatabase && (!config.dbHost || !config.dbUser || !config.dbName || !config.dbPassword)
-                ? 'Press Enter to fix database configuration...'
-                : 'Press Enter to continue with installation...'
-              }
+              {!config.installDatabase && (() => {
+                const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
+                const missingFields = requiredDbFields.filter(field => !config[field as keyof typeof config]);
+                return missingFields.length > 0
+                  ? 'Press Enter to fix database configuration...'
+                  : 'Press Enter to continue with installation...';
+              })()}
             </Text>
           </Box>
           <Box marginTop={1}>
