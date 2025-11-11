@@ -67,6 +67,23 @@ jobs:
         cd server
         go tool cover -func=coverage.out
 
+    - name: Check coverage thresholds
+      run: |
+        cd server
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+        echo "Total coverage: ${COVERAGE}%"
+
+        # Set minimum coverage threshold (35% - pragmatic baseline)
+        THRESHOLD=35
+
+        # Compare coverage to threshold
+        if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+          echo "❌ Coverage ${COVERAGE}% is below ${THRESHOLD}% threshold"
+          exit 1
+        else
+          echo "✅ Coverage ${COVERAGE}% meets ${THRESHOLD}% threshold"
+        fi
+
   test-frontend:
     name: Frontend Tests
     runs-on: ubuntu-latest
@@ -95,6 +112,28 @@ jobs:
         files: ./ui/coverage/coverage-final.json
         flags: frontend
         name: frontend-coverage
+
+    - name: Check frontend coverage thresholds
+      run: |
+        cd ui
+        # Extract coverage percentage from coverage summary
+        if [ -f coverage/coverage-summary.json ]; then
+          COVERAGE=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
+          echo "Frontend coverage: ${COVERAGE}%"
+
+          # Set minimum coverage threshold (30% for frontend to start)
+          THRESHOLD=30
+
+          # Compare coverage to threshold
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "❌ Frontend coverage ${COVERAGE}% is below ${THRESHOLD}% threshold"
+            exit 1
+          else
+            echo "✅ Frontend coverage ${COVERAGE}% meets ${THRESHOLD}% threshold"
+          fi
+        else
+          echo "⚠️ Coverage summary not found, skipping threshold check"
+        fi
 
   lint-backend:
     name: Backend Lint

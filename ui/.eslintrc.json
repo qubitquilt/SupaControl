@@ -35,5 +35,24 @@
       "version": "detect"
     }
   },
-  "ignorePatterns": ["dist", "node_modules", "coverage"]
+  "ignorePatterns": ["dist", "node_modules", "coverage"],
+  "overrides": [
+    {
+      "files": ["**/*.test.{js,jsx}", "**/*.spec.{js,jsx}", "**/test/**/*.{js,jsx}"],
+      "globals": {
+        "vi": "readonly",
+        "global": "readonly",
+        "describe": "readonly",
+        "it": "readonly",
+        "expect": "readonly",
+        "beforeEach": "readonly",
+        "afterEach": "readonly",
+        "beforeAll": "readonly",
+        "afterAll": "readonly"
+      },
+      "rules": {
+        "react-refresh/only-export-components": "off"
+      }
+    }
+  ]
 }

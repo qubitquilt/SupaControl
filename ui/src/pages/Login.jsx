@@ -15,7 +15,15 @@ function Login({ onLogin }) {
 
     try {
       const response = await authAPI.login(username, password);
-      localStorage.setItem('token', response.data.token);
+      const token = response.data?.token;
+
+      if (!token) {
+        setError('Invalid response from server. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      localStorage.setItem('token', token);
       onLogin();
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
