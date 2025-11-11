@@ -13,6 +13,17 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 ---
+# SECURITY NOTE: This ClusterRole grants cluster-wide permissions for namespace operations.
+# While this follows least-privilege for namespace management, the current architecture
+# requires Jobs to create namespaces before they can operate within them.
+#
+# RECOMMENDED IMPROVEMENT (Future): Refactor the controller to:
+# 1. Create target namespace before creating provisioning Job
+# 2. Create namespace-scoped Role + RoleBinding in target namespace
+# 3. Job operates only with namespace-scoped permissions (no ClusterRole needed)
+# This would limit blast radius to a single namespace instead of cluster-wide access.
+#
+# See: https://github.com/qubitquilt/SupaControl/issues/<TBD>
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -21,10 +32,16 @@ metadata:
     {{- include "supacontrol.labels" . | nindent 4 }}
     app.kubernetes.io/component: provisioner
 rules:
-# Namespace management - Jobs need to create and delete namespaces
+# Namespace management - Jobs create and delete instance namespaces
+# SECURITY: Limited to namespace resources only for least privilege
 - apiGroups: [""]
   resources: ["namespaces"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+
+# SECURITY WARNING: The following permissions are granted cluster-wide.
+# This is necessary with the current architecture where Jobs create their own namespaces
+# and then provision resources within them. A more secure approach would be to have the
+# controller create namespaces and use namespace-scoped Roles instead.
 
 # Secret management - Jobs need to create instance secrets and Helm release secrets
 - apiGroups: [""]
@@ -36,7 +53,7 @@ rules:
   resources: ["services"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
 
-# ConfigMap management - Required for Helm chart installations
+# ConfigMap management - Required for Helm chart installations and Helm release storage
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
@@ -46,7 +63,7 @@ rules:
   resources: ["pods", "pods/log"]
   verbs: ["create", "delete", "get", "list", "watch"]
 
-# PVC management - Required for stateful Supabase components
+# PVC management - Required for stateful Supabase components (PostgreSQL)
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
@@ -76,7 +93,7 @@ rules:
   resources: ["serviceaccounts"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
 
-# Role/RoleBinding management - Helm charts may create RBAC resources
+# Role/RoleBinding management - Helm charts may create namespace-scoped RBAC resources
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]

@@ -126,9 +126,8 @@ func TestReconcileProvisioning_TransitionsToInProgress(t *testing.T) {
 	defer cleanupInstance(ctx, t, instance)
 
 	// Initialize to Pending and then Provisioning
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Initialize to Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Create Job, transition to Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Get current state
 	current := getInstanceState(ctx, t, instance.Name)
@@ -202,8 +201,8 @@ func TestReconcileProvisioningInProgress_HandlesJobSuccess(t *testing.T) {
 	defer cleanupInstance(ctx, t, instance)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Get Job and set it to active, then successful
 	current := getInstanceState(ctx, t, instance.Name)
@@ -301,8 +300,8 @@ func TestReconcileProvisioningInProgress_HandlesJobFailure(t *testing.T) {
 	defer cleanupInstance(ctx, t, instance)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Get Job and simulate failure
 	current := getInstanceState(ctx, t, instance.Name)
@@ -390,8 +389,8 @@ func TestReconcileDelete_CreatesCleanupJob(t *testing.T) {
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Get current state
 	current := getInstanceState(ctx, t, instance.Name)
@@ -413,9 +412,13 @@ func TestReconcileDelete_CreatesCleanupJob(t *testing.T) {
 	job.Status.Conditions = []batchv1.JobCondition{
 		{Type: batchv1.JobComplete, Status: corev1.ConditionTrue},
 	}
-	_ = k8sClient.Status().Update(ctx, job)
+	if err := k8sClient.Status().Update(ctx, job); err != nil {
+		t.Fatalf("Failed to update Job status: %v", err)
+	}
 
-	_, _ = reconciler.Reconcile(ctx, req) // Transition to Running
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Failed to transition to Running: %v", err)
+	}
 
 	// Verify instance is Running
 	current = getInstanceState(ctx, t, instance.Name)
@@ -495,8 +498,8 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Transition to Running (simulate successful provision)
 	current := getInstanceState(ctx, t, instance.Name)
@@ -508,10 +511,14 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 			job.Status.Conditions = []batchv1.JobCondition{
 				{Type: batchv1.JobComplete, Status: corev1.ConditionTrue},
 			}
-			_ = k8sClient.Status().Update(ctx, job)
+			if err := k8sClient.Status().Update(ctx, job); err != nil {
+				t.Fatalf("Failed to update Job status: %v", err)
+			}
 		}
 	}
-	_, _ = reconciler.Reconcile(ctx, req) // Running
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Failed to reconcile Running state: %v", err)
+	}
 
 	// Delete and start cleanup
 	current = getInstanceState(ctx, t, instance.Name)
@@ -519,7 +526,9 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 		t.Fatal("Instance not found")
 	}
 	_ = k8sClient.Delete(ctx, current)
-	_, _ = reconciler.Reconcile(ctx, req) // Create cleanup Job
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Failed to create cleanup Job: %v", err)
+	}
 
 	// Get cleanup Job and make it active
 	current = getInstanceState(ctx, t, instance.Name)
@@ -549,7 +558,9 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 	}
 
 	// Reconcile to detect active cleanup Job
-	_, _ = reconciler.Reconcile(ctx, req)
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Logf("Reconcile error (may be expected): %v", err)
+	}
 
 	// Verify instance is in DeletingInProgress
 	current = getInstanceState(ctx, t, instance.Name)
@@ -572,7 +583,9 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 	}
 
 	// Final reconcile should complete deletion
-	_, _ = reconciler.Reconcile(ctx, req)
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Logf("Reconcile error (may be expected): %v", err)
+	}
 
 	// Verify instance is eventually deleted
 	success := waitForCondition(5*time.Second, func() bool {
@@ -598,8 +611,8 @@ func TestJobOwnerReferences_PreventOrphans(t *testing.T) {
 	defer cleanupInstance(ctx, t, instance)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Get the created Job
 	current := getInstanceState(ctx, t, instance.Name)
@@ -654,7 +667,9 @@ func TestJobOwnerReferences_PreventOrphans(t *testing.T) {
 	}
 
 	// Reconcile deletion
-	_, _ = reconciler.Reconcile(ctx, req)
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Logf("Reconcile error (may be expected): %v", err)
+	}
 
 	// Wait a bit for Kubernetes to process deletion
 	time.Sleep(1 * time.Second)
@@ -715,8 +730,8 @@ func TestJobTimeout_HandlesActiveDeadlineSeconds(t *testing.T) {
 	defer cleanupInstance(ctx, t, instance)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Get Job
 	current := getInstanceState(ctx, t, instance.Name)
@@ -818,8 +833,8 @@ func TestReconcileRunning_PeriodicHealthChecks(t *testing.T) {
 	defer cleanupInstance(ctx, t, instance)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
-	_, _ = reconciler.Reconcile(ctx, req) // Pending
-	_, _ = reconciler.Reconcile(ctx, req) // Provisioning
+	reconcileToPending(ctx, t, reconciler, instance.Name)
+	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
 	// Transition to Running
 	current := getInstanceState(ctx, t, instance.Name)
@@ -831,10 +846,14 @@ func TestReconcileRunning_PeriodicHealthChecks(t *testing.T) {
 			job.Status.Conditions = []batchv1.JobCondition{
 				{Type: batchv1.JobComplete, Status: corev1.ConditionTrue},
 			}
-			_ = k8sClient.Status().Update(ctx, job)
+			if err := k8sClient.Status().Update(ctx, job); err != nil {
+				t.Fatalf("Failed to update Job status: %v", err)
+			}
 		}
 	}
-	_, _ = reconciler.Reconcile(ctx, req) // Running
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Failed to reconcile Running state: %v", err)
+	}
 
 	// Verify instance is Running
 	current = getInstanceState(ctx, t, instance.Name)

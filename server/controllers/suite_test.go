@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -137,4 +139,56 @@ func cleanupInstance(ctx context.Context, t *testing.T, instance *supacontrolv1a
 		current := getInstanceState(ctx, t, instance.Name)
 		return current == nil
 	})
+}
+
+// Helper function to reconcile and advance instance to Pending phase
+func reconcileToPending(ctx context.Context, t *testing.T, reconciler *SupabaseInstanceReconciler, instanceName string) {
+	t.Helper()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instanceName}}
+	result, err := reconciler.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("Failed to reconcile to Pending: %v", err)
+	}
+	if !result.Requeue {
+		t.Error("Expected requeue for Pending phase initialization")
+	}
+}
+
+// Helper function to reconcile and advance instance to Provisioning phase
+func reconcileToProvisioning(ctx context.Context, t *testing.T, reconciler *SupabaseInstanceReconciler, instanceName string) {
+	t.Helper()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instanceName}}
+	result, err := reconciler.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("Failed to reconcile to Provisioning: %v", err)
+	}
+	if !result.Requeue {
+		t.Error("Expected requeue for Provisioning phase")
+	}
+}
+
+// Helper function to simulate Job success
+func setJobSucceeded(ctx context.Context, t *testing.T, jobName string) {
+	t.Helper()
+	job := &batchv1.Job{}
+	err := k8sClient.Get(ctx, types.NamespacedName{
+		Name:      jobName,
+		Namespace: ControllerNamespace,
+	}, job)
+	if err != nil {
+		t.Fatalf("Failed to get Job: %v", err)
+	}
+
+	job.Status.Succeeded = 1
+	job.Status.Active = 0
+	job.Status.Conditions = []batchv1.JobCondition{
+		{
+			Type:   batchv1.JobComplete,
+			Status: corev1.ConditionTrue,
+		},
+	}
+	err = k8sClient.Status().Update(ctx, job)
+	if err != nil {
+		t.Fatalf("Failed to update Job status to succeeded: %v", err)
+	}
 }
