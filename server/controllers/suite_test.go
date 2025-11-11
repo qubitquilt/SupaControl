@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -199,6 +200,26 @@ func setJobSucceeded(ctx context.Context, t *testing.T, jobName string) {
 	}, job)
 	if err != nil {
 		t.Fatalf("Failed to get Job: %v", err)
+	}
+
+	// Extract instance name from job name and create instance namespace
+	// Job names follow pattern: supacontrol-provision-{instance-name} or supacontrol-cleanup-{instance-name}
+	// We need to create the supa-{instance-name} namespace that Helm would normally create
+	var instanceName string
+	if len(jobName) > len("supacontrol-provision-") && jobName[:len("supacontrol-provision-")] == "supacontrol-provision-" {
+		instanceName = jobName[len("supacontrol-provision-"):]
+	} else if len(jobName) > len("supacontrol-cleanup-") && jobName[:len("supacontrol-cleanup-")] == "supacontrol-cleanup-" {
+		instanceName = jobName[len("supacontrol-cleanup-"):]
+	}
+
+	if instanceName != "" {
+		instanceNs := &corev1.Namespace{}
+		instanceNs.Name = "supa-" + instanceName
+		// Try to create namespace - ignore if it already exists
+		err = k8sClient.Create(ctx, instanceNs)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			t.Logf("Warning: failed to create instance namespace %s: %v", instanceNs.Name, err)
+		}
 	}
 
 	job.Status.Succeeded = 1
