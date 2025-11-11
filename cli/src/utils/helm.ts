@@ -201,31 +201,21 @@ export async function installHelm(
   }
 }
 
-// Helper function to run Helm command with AbortController timeout
 async function runHelmCommand(
-  args: string[], 
-  options: any, 
+  args: string[],
+  options: any,
   timeoutMs: number,
   description: string
 ): Promise<{ stdout: string; stderr: string }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => {
-    console.log(`Timeout reached for ${description} - aborting...`);
-    controller.abort();
-  }, timeoutMs);
-
   try {
     console.log(`Executing: helm ${args.join(' ')}`);
     const result = await execa('helm', args, {
       ...options,
-      signal: controller.signal,
       timeout: timeoutMs,
     });
-    clearTimeout(timeout);
     return { stdout: result.stdout, stderr: result.stderr };
   } catch (error: any) {
-    clearTimeout(timeout);
-    if (error.signal === 'SIGABRT') {
+    if (error.isTimeout) {
       throw new Error(`Command timeout: ${description} took longer than ${timeoutMs}ms`);
     }
     throw error;
