@@ -403,6 +403,8 @@ curl -X GET https://supacontrol.example.com/api/v1/instances \
 | `DEFAULT_INGRESS_CLASS` | Ingress class | `nginx` | No |
 | `DEFAULT_INGRESS_DOMAIN` | Base domain for instances | `supabase.example.com` | No |
 
+> **Note for Developers**: The `KUBECONFIG` environment variable is crucial for local Kubernetes development. See the [Development Guide](docs/DEVELOPMENT.md#kubernetes-configuration-for-local-development) for detailed setup instructions and troubleshooting.
+
 For complete configuration options, see the [Helm chart values](charts/supacontrol/values.yaml).
 
 ## Documentation

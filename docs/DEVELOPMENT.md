@@ -83,6 +83,10 @@ export DB_PASSWORD=password
 export DB_NAME=supacontrol
 export JWT_SECRET=your-dev-jwt-secret-change-this
 
+# Set KUBECONFIG for local Kubernetes development
+# This is crucial if you're not running in-cluster or using a non-default kubeconfig path
+export KUBECONFIG=$HOME/.kube/config  # or your custom kubeconfig path
+
 # Option 1: Use Docker for PostgreSQL
 docker run --name supacontrol-postgres \
   -e POSTGRES_USER=supacontrol \
@@ -99,6 +103,39 @@ go run main.go
 
 # Server runs on http://localhost:8091
 ```
+
+### Kubernetes Configuration for Local Development
+
+When developing locally, SupaControl needs access to a Kubernetes cluster to manage Supabase instances. Configure your environment based on your setup:
+
+**For local clusters (minikube, kind, k3s, Docker Desktop):**
+```bash
+# Use default kubeconfig location
+export KUBECONFIG=$HOME/.kube/config
+
+# Verify connection
+kubectl cluster-info
+kubectl get nodes
+```
+
+**For custom kubeconfig paths:**
+```bash
+# Point to your custom config
+export KUBECONFIG=/path/to/your/kubeconfig.yaml
+
+# Or merge multiple configs
+export KUBECONFIG=$HOME/.kube/config:$HOME/.kube/config-dev
+```
+
+**For in-cluster development:**
+- If running SupaControl inside a Kubernetes pod, KUBECONFIG is not needed
+- The application will automatically use in-cluster service account credentials
+- See [DEPLOYMENT.md](DEPLOYMENT.md) for production deployment patterns
+
+**Troubleshooting:**
+- If you see "unable to connect to Kubernetes" errors, check your KUBECONFIG
+- Verify your cluster is accessible: `kubectl get nodes`
+- Ensure proper RBAC permissions (see [charts/supacontrol/templates/rbac.yaml](../charts/supacontrol/templates/rbac.yaml))
 
 **Backend Code Guidelines:**
 - Follow [Effective Go](https://golang.org/doc/effective_go.html) conventions
