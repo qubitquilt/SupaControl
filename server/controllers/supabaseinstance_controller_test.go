@@ -126,6 +126,7 @@ func TestReconcileProvisioning_TransitionsToInProgress(t *testing.T) {
 	defer cleanupInstance(ctx, t, instance)
 
 	// Initialize to Pending and then Provisioning
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
 	reconcileToPending(ctx, t, reconciler, instance.Name)
 	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
@@ -729,7 +730,6 @@ func TestJobTimeout_HandlesActiveDeadlineSeconds(t *testing.T) {
 	}
 	defer cleanupInstance(ctx, t, instance)
 
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: instance.Name}}
 	reconcileToPending(ctx, t, reconciler, instance.Name)
 	reconcileToProvisioning(ctx, t, reconciler, instance.Name)
 
