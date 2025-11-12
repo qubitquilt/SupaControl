@@ -318,7 +318,6 @@ func TestConvertCRToAPIType(t *testing.T) {
 	}
 }
 
-
 // TestRestartInstance tests the RestartInstance handler
 func TestRestartInstance(t *testing.T) {
 	tests := []struct {
