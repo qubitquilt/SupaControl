@@ -73,6 +73,7 @@ func (r *SupabaseInstanceReconciler) createProvisioningJob(ctx context.Context, 
 			Annotations: map[string]string{
 				"supacontrol.io/instance-uid": string(instance.UID),
 			},
+			OwnerReferences: []metav1.OwnerReference{ *metav1.NewControllerRef(instance, supacontrolv1alpha1.GroupVersion.WithKind("SupabaseInstance")), },
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            pointer.Int32(3),    // Retry up to 3 times
@@ -248,6 +249,7 @@ func (r *SupabaseInstanceReconciler) createCleanupJob(ctx context.Context, insta
 			Annotations: map[string]string{
 				"supacontrol.io/instance-uid": string(instance.UID),
 			},
+			OwnerReferences: []metav1.OwnerReference{ *metav1.NewControllerRef(instance, supacontrolv1alpha1.GroupVersion.WithKind("SupabaseInstance")), },
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            pointer.Int32(2),    // Retry up to 2 times

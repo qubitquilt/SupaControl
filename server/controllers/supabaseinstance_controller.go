@@ -7,6 +7,7 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -613,5 +614,8 @@ func (r *SupabaseInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&supacontrolv1alpha1.SupabaseInstance{}).
 		Owns(&batchv1.Job{}).
+		Owns(&corev1.Namespace{}).
+		Owns(&corev1.Secret{}).
+		Owns(&networkingv1.Ingress{}).
 		Complete(r)
 }
