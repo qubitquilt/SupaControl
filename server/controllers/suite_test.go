@@ -127,7 +127,7 @@ func createBasicInstance(name string) *supacontrolv1alpha1.SupabaseInstance {
 	sanitizedName := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
 	sanitizedName = strings.ReplaceAll(sanitizedName, "/", "-")
 	sanitizedName = fmt.Sprintf("test-%s-%d", sanitizedName, time.Now().UnixNano())
-
+	
 	return &supacontrolv1alpha1.SupabaseInstance{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name: sanitizedName,
@@ -177,7 +177,7 @@ func reconcileToPending(ctx context.Context, t *testing.T, reconciler *SupabaseI
 	if err != nil {
 		t.Fatalf("Failed to reconcile to Pending: %v", err)
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		t.Error("Expected requeue for Pending phase initialization")
 	}
 }
@@ -190,7 +190,7 @@ func reconcileToProvisioning(ctx context.Context, t *testing.T, reconciler *Supa
 	if err != nil {
 		t.Fatalf("Failed to reconcile to Provisioning: %v", err)
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		t.Error("Expected requeue for Provisioning phase")
 	}
 }
