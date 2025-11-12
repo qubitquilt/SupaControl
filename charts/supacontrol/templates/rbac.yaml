@@ -6,6 +6,16 @@ metadata:
   labels:
     {{- include "supacontrol.labels" . | nindent 4 }}
 rules:
+# Custom resource management for SupabaseInstance
+- apiGroups: ["supacontrol.qubitquilt.com"]
+  resources: ["supabaseinstances"]
+  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+- apiGroups: ["supacontrol.qubitquilt.com"]
+  resources: ["supabaseinstances/status"]
+  verbs: ["get", "update", "patch"]
+- apiGroups: ["supacontrol.qubitquilt.com"]
+  resources: ["supabaseinstances/finalizers"]
+  verbs: ["update"]
 # Namespace management
 - apiGroups: [""]
   resources: ["namespaces"]
@@ -46,6 +56,10 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["create", "delete", "get", "list", "watch"]
+# RBAC management
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings"]
+  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

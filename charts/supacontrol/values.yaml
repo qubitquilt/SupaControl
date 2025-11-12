@@ -97,8 +97,8 @@ postgresql:
   fullnameOverride: "supacontrol-postgresql"
   image:
     registry: docker.io
-    repository: bitnami/postgresql
-    tag: "14.11.0"  # Use specific stable version
+    repository: postgres
+    tag: "14-alpine"  # Match existing StatefulSet image
   auth:
     username: supacontrol
     # REQUIRED: Set a secure password for the PostgreSQL database (or leave empty for auto-generation)
