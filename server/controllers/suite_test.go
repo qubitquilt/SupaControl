@@ -123,12 +123,17 @@ func createTestReconciler() *SupabaseInstanceReconciler {
 
 // Helper function to create a basic SupabaseInstance
 func createBasicInstance(name string) *supacontrolv1alpha1.SupabaseInstance {
+	// Sanitize the name to be a valid Kubernetes resource name
+	sanitizedName := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	sanitizedName = strings.ReplaceAll(sanitizedName, "/", "-")
+	sanitizedName = fmt.Sprintf("test-%s-%d", sanitizedName, time.Now().UnixNano())
+
 	return &supacontrolv1alpha1.SupabaseInstance{
 		ObjectMeta: ctrl.ObjectMeta{
-			Name: name,
+			Name: sanitizedName,
 		},
 		Spec: supacontrolv1alpha1.SupabaseInstanceSpec{
-			ProjectName: name,
+			ProjectName: sanitizedName,
 		},
 	}
 }
