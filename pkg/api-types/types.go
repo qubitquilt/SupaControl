@@ -36,7 +36,7 @@ type CreateAPIKeyRequest struct {
 // CreateAPIKeyResponse represents an API key creation response
 type CreateAPIKeyResponse struct {
 	Key     string  `json:"key"`
-	APIKey  *APIKey `json:"key"`
+	APIKey  *APIKey `json:"api_key"`
 	Message string  `json:"message"`
 }
 
@@ -45,8 +45,7 @@ type APIKey struct {
 	ID        int64      `json:"id" db:"id"`
 	UserID    int64      `json:"user_id" db:"user_id"`
 	Name      string     `json:"name" db:"name"`
-	// Never expose the hash
-	KeyHash   string     `json:"-" db:"key_hash"`
+	KeyHash   string     `json:"key_hash" db:"key_hash"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at" db:"expires_at"`
 	LastUsed  *time.Time `json:"last_used" db:"last_used"`
