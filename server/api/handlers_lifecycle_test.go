@@ -15,7 +15,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -307,7 +306,8 @@ func TestConvertCRToAPIType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := handler.convertCRToAPIType(tt.cr)
+			c, _ := newTestContext(http.MethodGet, "/", "")
+			result := handler.convertCRToAPIType(c, tt.cr)
 			if result.Status != tt.expected {
 				t.Errorf("expected status %s, got %s", tt.expected, result.Status)
 			}
@@ -316,15 +316,6 @@ func TestConvertCRToAPIType(t *testing.T) {
 			}
 		})
 	}
-}
-
-// mockK8sClient is a mock implementation of K8sClient for testing
-type mockK8sClient struct {
-	clientset kubernetes.Interface
-}
-
-func (m *mockK8sClient) GetClientset() kubernetes.Interface {
-	return m.clientset
 }
 
 // TestRestartInstance tests the RestartInstance handler
