@@ -121,8 +121,8 @@ func TestMetricsMiddleware(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetPath("/test-success")
 
-		// Get initial metric values
-		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-success", "GET", "OK"))
+		// Get initial metric values (using numeric status code)
+		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-success", "GET", "200"))
 		initialDuration := testutil.ToFloat64(metrics.APIRequestDuration.WithLabelValues("/test-success", "GET"))
 
 		// Create middleware handler
@@ -135,7 +135,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify metrics were incremented
-		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-success", "GET", "OK"))
+		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-success", "GET", "200"))
 		assert.Equal(t, initialCount+1, finalCount, "request counter should increment by 1")
 
 		// Verify duration histogram was updated (count increases)
@@ -150,8 +150,8 @@ func TestMetricsMiddleware(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetPath("/test-error")
 
-		// Get initial metric values for Bad Request status
-		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-error", "GET", "Bad Request"))
+		// Get initial metric values for 400 Bad Request status (using numeric code)
+		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-error", "GET", "400"))
 
 		// Create middleware handler that returns error
 		handler := MetricsMiddleware()(func(c echo.Context) error {
@@ -167,7 +167,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, he.Code)
 
 		// Verify metrics were recorded for error status
-		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-error", "GET", "Bad Request"))
+		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-error", "GET", "400"))
 		assert.Equal(t, initialCount+1, finalCount, "error counter should increment by 1")
 	})
 
@@ -181,8 +181,8 @@ func TestMetricsMiddleware(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetPath("/test-methods")
 
-			// Get initial count for this method
-			initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-methods", method, "OK"))
+			// Get initial count for this method (using numeric status code)
+			initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-methods", method, "200"))
 
 			handler := MetricsMiddleware()(func(c echo.Context) error {
 				return c.String(http.StatusOK, "success")
@@ -192,7 +192,7 @@ func TestMetricsMiddleware(t *testing.T) {
 			assert.NoError(t, err, "method %s should succeed", method)
 
 			// Verify metric was recorded for this method
-			finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-methods", method, "OK"))
+			finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-methods", method, "200"))
 			assert.Equal(t, initialCount+1, finalCount, "counter for method %s should increment", method)
 		}
 	})
@@ -226,8 +226,8 @@ func TestMetricsMiddleware(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.SetPath("/test-500")
 
-		// Get initial metric values for Internal Server Error
-		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-500", "POST", "Internal Server Error"))
+		// Get initial metric values for 500 Internal Server Error (using numeric code)
+		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-500", "POST", "500"))
 
 		// Create middleware handler that returns non-HTTPError error
 		handler := MetricsMiddleware()(func(c echo.Context) error {
@@ -238,8 +238,8 @@ func TestMetricsMiddleware(t *testing.T) {
 		assert.Error(t, err)
 
 		// Verify metrics recorded 500 status for non-HTTPError
-		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-500", "POST", "Internal Server Error"))
-		assert.Equal(t, initialCount+1, finalCount, "should record Internal Server Error for non-HTTPError")
+		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-500", "POST", "500"))
+		assert.Equal(t, initialCount+1, finalCount, "should record 500 status for non-HTTPError")
 	})
 }
 

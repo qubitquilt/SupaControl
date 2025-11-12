@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -224,11 +225,11 @@ func MetricsMiddleware() echo.MiddlewareFunc {
 				}
 			}
 
-			// Record metrics
+			// Record metrics (use numeric status code for stability and consistency)
 			metrics.APIRequestsTotal.WithLabelValues(
 				endpoint,
 				method,
-				http.StatusText(statusCode),
+				strconv.Itoa(statusCode),
 			).Inc()
 
 			metrics.APIRequestDuration.WithLabelValues(
