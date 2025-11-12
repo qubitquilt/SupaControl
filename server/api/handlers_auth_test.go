@@ -95,7 +95,7 @@ func TestLogin(t *testing.T) {
 			authSvc := auth.NewService("test-secret-key")
 			tt.setupMock(mockDB, authSvc)
 
-			handler := NewHandler(authSvc, mockDB, nil)
+			handler := NewHandler(authSvc, mockDB, nil, nil)
 			c, rec := newTestContext(http.MethodPost, "/api/v1/auth/login", tt.requestBody)
 
 			err := handler.Login(c)
@@ -192,7 +192,7 @@ func TestGetAuthMe(t *testing.T) {
 			mockDB := &mockDBClient{}
 			tt.setupMock(mockDB)
 
-			handler := NewHandler(nil, mockDB, nil)
+			handler := NewHandler(nil, mockDB, nil, nil)
 			c, rec := newTestContext(http.MethodGet, "/api/v1/auth/me", "")
 
 			if tt.setAuth {
@@ -277,7 +277,7 @@ func TestCreateAPIKey(t *testing.T) {
 			tt.setupMock(mockDB)
 			authSvc := auth.NewService("test-secret-key")
 
-			handler := NewHandler(authSvc, mockDB, nil)
+			handler := NewHandler(authSvc, mockDB, nil, nil)
 			c, rec := newTestContext(http.MethodPost, "/api/v1/auth/api-keys", tt.requestBody)
 
 			if tt.setAuth {
@@ -380,7 +380,7 @@ func TestListAPIKeys(t *testing.T) {
 			mockDB := &mockDBClient{}
 			tt.setupMock(mockDB)
 
-			handler := NewHandler(nil, mockDB, nil)
+			handler := NewHandler(nil, mockDB, nil, nil)
 			c, rec := newTestContext(http.MethodGet, "/api/v1/auth/api-keys", "")
 
 			if tt.setAuth {
@@ -518,7 +518,7 @@ func TestDeleteAPIKey(t *testing.T) {
 			mockDB := &mockDBClient{}
 			tt.setupMock(mockDB)
 
-			handler := NewHandler(nil, mockDB, nil)
+			handler := NewHandler(nil, mockDB, nil, nil)
 			c, rec := newTestContext(http.MethodDelete, "/api/v1/auth/api-keys/"+tt.apiKeyID, "")
 			c.SetParamNames("id")
 			c.SetParamValues(tt.apiKeyID)
