@@ -379,20 +379,34 @@ func TestUpdateInstance(t *testing.T) {
 
 #### Adding Database Migrations
 
+**Important**: Per ADR-001, instance state is stored in Kubernetes CRDs, NOT PostgreSQL. Only add database migrations for SupaControl's operational data (users, API keys, audit logs, etc.).
+
 1. **Create migration file**: `server/internal/db/migrations/00X_description.sql`
 
 ```sql
--- 004_add_instance_description.sql
-ALTER TABLE instances ADD COLUMN description TEXT DEFAULT '';
-CREATE INDEX idx_instances_description ON instances(description);
+-- Example: 004_add_audit_log_table.sql
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id),
+    action VARCHAR(255) NOT NULL,
+    resource_type VARCHAR(100) NOT NULL,
+    resource_id VARCHAR(255),
+    timestamp TIMESTAMP DEFAULT NOW(),
+    details JSONB
+);
+
+CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
 ```
 
-2. **Update repository**: Add functions in `server/internal/db/instances.go`
+2. **Update repository**: Add functions in the appropriate file (e.g., `server/internal/db/audit_logs.go`)
 
 ```go
-func (r *InstanceRepository) UpdateDescription(ctx context.Context, name, description string) error {
-    query := `UPDATE instances SET description = $1 WHERE name = $2`
-    _, err := r.db.ExecContext(ctx, query, description, name)
+// server/internal/db/audit_logs.go
+func (r *AuditLogRepository) CreateLog(ctx context.Context, log *AuditLog) error {
+    query := `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details)
+              VALUES ($1, $2, $3, $4, $5)`
+    _, err := r.db.ExecContext(ctx, query, log.UserID, log.Action, log.ResourceType, log.ResourceID, log.Details)
     return err
 }
 ```
@@ -402,7 +416,7 @@ func (r *InstanceRepository) UpdateDescription(ctx context.Context, name, descri
 ```bash
 psql -h localhost -U supacontrol -d supacontrol
 # Verify schema changes
-\d instances
+\d audit_logs
 ```
 
 ### Frontend Changes (React)

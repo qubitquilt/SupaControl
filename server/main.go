@@ -158,8 +158,8 @@ func run() error {
 	e := echo.New()
 	e.HideBanner = true
 
-	// Initialize handler with CR client
-	handler := api.NewHandler(authService, dbClient, crClient)
+	// Initialize handler with CR client and k8s client
+	handler := api.NewHandler(authService, dbClient, crClient, k8sClient)
 
 	// Setup routes
 	api.SetupRouter(e, handler, authService, dbClient)

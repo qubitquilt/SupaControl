@@ -94,6 +94,7 @@ type mockCRClient struct {
 	createSupabaseInstanceFunc func(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error
 	getSupabaseInstanceFunc    func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error)
 	listSupabaseInstancesFunc  func(ctx context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error)
+	updateSupabaseInstanceFunc func(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error
 	deleteSupabaseInstanceFunc func(ctx context.Context, name string) error
 }
 
@@ -116,6 +117,13 @@ func (m *mockCRClient) ListSupabaseInstances(ctx context.Context) (*supacontrolv
 		return m.listSupabaseInstancesFunc(ctx)
 	}
 	return nil, fmt.Errorf("ListSupabaseInstances not implemented")
+}
+
+func (m *mockCRClient) UpdateSupabaseInstance(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+	if m.updateSupabaseInstanceFunc != nil {
+		return m.updateSupabaseInstanceFunc(ctx, instance)
+	}
+	return fmt.Errorf("UpdateSupabaseInstance not implemented")
 }
 
 func (m *mockCRClient) DeleteSupabaseInstance(ctx context.Context, name string) error {

@@ -32,10 +32,14 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-# Pod management (for Helm releases)
+# Pod management (for Helm releases and lifecycle operations)
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["create", "delete", "get", "list", "watch"]
+# Pod logs access (for logs endpoint)
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
 # PVC management
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]

@@ -76,7 +76,7 @@ func TestCreateInstance(t *testing.T) {
 			mockCR := &mockCRClient{}
 			tt.setupMock(mockCR)
 
-			handler := NewHandler(nil, nil, mockCR)
+			handler := NewHandler(nil, nil, mockCR, nil)
 			c, rec := newTestContext(http.MethodPost, "/api/v1/instances", tt.requestBody)
 
 			err := handler.CreateInstance(c)
@@ -185,7 +185,7 @@ func TestListInstances(t *testing.T) {
 			mockCR := &mockCRClient{}
 			tt.setupMock(mockCR)
 
-			handler := NewHandler(nil, nil, mockCR)
+			handler := NewHandler(nil, nil, mockCR, nil)
 			c, rec := newTestContext(http.MethodGet, "/api/v1/instances", "")
 
 			err := handler.ListInstances(c)
@@ -267,7 +267,7 @@ func TestGetInstance(t *testing.T) {
 			mockCR := &mockCRClient{}
 			tt.setupMock(mockCR)
 
-			handler := NewHandler(nil, nil, mockCR)
+			handler := NewHandler(nil, nil, mockCR, nil)
 			c, rec := newTestContext(http.MethodGet, "/api/v1/instances/"+tt.instanceName, "")
 			c.SetParamNames("name")
 			c.SetParamValues(tt.instanceName)
@@ -350,7 +350,7 @@ func TestDeleteInstance(t *testing.T) {
 			mockCR := &mockCRClient{}
 			tt.setupMock(mockCR)
 
-			handler := NewHandler(nil, nil, mockCR)
+			handler := NewHandler(nil, nil, mockCR, nil)
 			c, rec := newTestContext(http.MethodDelete, "/api/v1/instances/"+tt.instanceName, "")
 			c.SetParamNames("name")
 			c.SetParamValues(tt.instanceName)

@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
+	"github.com/qubitquilt/supacontrol/server/internal/metrics"
 )
 
 const (
@@ -50,6 +51,7 @@ type SupabaseInstanceReconciler struct {
 // Reconcile is the main reconciliation loop
 func (r *SupabaseInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
+	startTime := time.Now()
 
 	// Fetch the SupabaseInstance resource
 	instance := &supacontrolv1alpha1.SupabaseInstance{}
@@ -59,8 +61,21 @@ func (r *SupabaseInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "Failed to get SupabaseInstance")
+		metrics.ReconciliationErrorsTotal.WithLabelValues("unknown").Inc()
 		return ctrl.Result{}, err
 	}
+
+	phase := string(instance.Status.Phase)
+	if phase == "" {
+		phase = "unknown"
+	}
+
+	// Track reconciliation
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.ReconciliationTotal.WithLabelValues(phase).Inc()
+		metrics.ReconciliationDuration.WithLabelValues(phase).Observe(duration)
+	}()
 
 	// Check if reconciliation is paused
 	if instance.Spec.Paused {
@@ -77,8 +92,11 @@ func (r *SupabaseInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if !controllerutil.ContainsFinalizer(instance, FinalizerName) {
 		controllerutil.AddFinalizer(instance, FinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
+			metrics.ReconciliationErrorsTotal.WithLabelValues(phase).Inc()
 			return ctrl.Result{}, err
 		}
+		// Increment instance counter when first created (finalizer added)
+		metrics.InstancesTotal.Inc()
 	}
 
 	// Reconcile based on current phase
@@ -97,6 +115,8 @@ func (r *SupabaseInstanceReconciler) reconcileNormal(ctx context.Context, instan
 		if err := r.Status().Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
+		// Update metrics for initial phase
+		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhasePending), supacontrolv1alpha1.AllPhases())
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -153,6 +173,9 @@ func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, insta
 		return ctrl.Result{}, err
 	}
 
+	// Update metrics
+	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseProvisioning), supacontrolv1alpha1.AllPhases())
+
 	// Requeue immediately to check Job status
 	return ctrl.Result{Requeue: true}, nil
 }
@@ -204,6 +227,9 @@ func (r *SupabaseInstanceReconciler) reconcileProvisioning(ctx context.Context, 
 		if err := r.Status().Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Update metrics
+		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseProvisioningInProgress), supacontrolv1alpha1.AllPhases())
 
 		// Requeue to check status again
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
@@ -268,6 +294,13 @@ func (r *SupabaseInstanceReconciler) transitionToRunning(ctx context.Context, in
 	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Provisioning complete, transitioning to Running", "projectName", instance.Spec.ProjectName)
 
+	// Calculate creation duration (from resource creation to Running)
+	if !instance.CreationTimestamp.IsZero() {
+		creationDuration := time.Since(instance.CreationTimestamp.Time).Seconds()
+		metrics.InstanceCreationDuration.Observe(creationDuration)
+		logger.Info("Instance creation duration", "duration_seconds", creationDuration)
+	}
+
 	instance.Status.Phase = supacontrolv1alpha1.PhaseRunning
 	instance.Status.ErrorMessage = ""
 	now := metav1.Now()
@@ -302,6 +335,10 @@ func (r *SupabaseInstanceReconciler) transitionToRunning(ctx context.Context, in
 	if err := r.Status().Update(ctx, instance); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Update metrics
+	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseRunning), supacontrolv1alpha1.AllPhases())
+	metrics.JobStatusTotal.WithLabelValues("provision", "succeeded").Inc()
 
 	// Requeue with delay for periodic health checks
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
@@ -348,6 +385,8 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 			if err := r.Status().Update(ctx, instance); err != nil {
 				return ctrl.Result{}, err
 			}
+			// Update metrics for Deleting phase
+			metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseDeleting), supacontrolv1alpha1.AllPhases())
 		}
 
 		// Perform cleanup via Job
@@ -361,6 +400,10 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 		if err := r.Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Update metrics - instance is being deleted
+		metrics.InstancesTotal.Dec()
+		metrics.DeleteInstanceMetrics(instance.Spec.ProjectName, supacontrolv1alpha1.AllPhases())
 	}
 
 	return ctrl.Result{}, nil
@@ -403,6 +446,7 @@ func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance
 	// Check if Job succeeded
 	if isJobSucceeded(job) {
 		logger.Info("Cleanup Job succeeded", "jobName", jobName)
+		metrics.JobStatusTotal.WithLabelValues("cleanup", "succeeded").Inc()
 		return nil
 	}
 
@@ -410,6 +454,7 @@ func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance
 	if isJobFailed(job) {
 		errMsg := getJobConditionMessage(job)
 		logger.Error(errors.New(errMsg), "Cleanup Job failed", "jobName", jobName)
+		metrics.JobStatusTotal.WithLabelValues("cleanup", "failed").Inc()
 		// Don't block deletion on cleanup failure, just log it
 		return nil
 	}
@@ -423,6 +468,8 @@ func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance
 		if err := r.Status().Update(ctx, instance); err != nil {
 			return err
 		}
+		// Update metrics for DeletingInProgress phase
+		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseDeletingInProgress), supacontrolv1alpha1.AllPhases())
 	}
 
 	logger.V(1).Info("Cleanup Job still running", "jobName", jobName, "active", job.Status.Active)
@@ -549,6 +596,10 @@ func (r *SupabaseInstanceReconciler) transitionToFailed(ctx context.Context, ins
 	if err := r.Status().Update(ctx, instance); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Update metrics
+	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseFailed), supacontrolv1alpha1.AllPhases())
+	metrics.JobStatusTotal.WithLabelValues("provision", "failed").Inc()
 
 	// Requeue with delay for periodic monitoring of failed state
 	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
