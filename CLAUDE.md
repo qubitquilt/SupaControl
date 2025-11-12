@@ -372,18 +372,18 @@ try {
 
 1. **Create**: POST /api/v1/instances
    - Validates name
-   - Creates namespace `supa-{name}`
-   - Installs Helm chart
-   - Stores in database
+   - Creates SupabaseInstance CRD in Kubernetes
+   - Controller watches CRD and provisions resources
+   - Controller creates namespace `supa-{name}`, secrets, and Helm release
 
 2. **Monitor**: GET /api/v1/instances/:name
-   - Queries Kubernetes for pod status
-   - Returns deployment state
+   - Queries SupabaseInstance CRD for status
+   - Returns deployment state from CRD status
 
 3. **Delete**: DELETE /api/v1/instances/:name
-   - Uninstalls Helm release
-   - Deletes namespace
-   - Soft deletes from database
+   - Deletes SupabaseInstance CRD
+   - Controller finalizer ensures cleanup (Helm release, namespace)
+   - CRD removed from Kubernetes
 
 ### Security Considerations
 
@@ -409,31 +409,36 @@ try {
 
 **Example**: Add "description" field to instances
 
-1. **Update database**:
-```sql
--- server/internal/db/migrations/00X_add_description.sql
-ALTER TABLE instances ADD COLUMN description TEXT DEFAULT '';
-```
+**Note**: Per ADR-001, instance state is stored in SupabaseInstance CRDs, not PostgreSQL.
 
-2. **Update struct**:
+1. **Update CRD spec**:
 ```go
-// server/internal/db/instances.go
-type Instance struct {
-    ID          int       `db:"id"`
-    Name        string    `db:"name"`
-    Namespace   string    `db:"namespace"`
-    Description string    `db:"description"`  // NEW
-    Status      string    `db:"status"`
-    CreatedAt   time.Time `db:"created_at"`
+// api/v1/supabaseinstance_types.go
+type SupabaseInstanceSpec struct {
+    ProjectName string `json:"projectName"`
+    Description string `json:"description,omitempty"`  // NEW
+    // ... other fields
 }
 ```
 
-3. **Update API types**:
+2. **Update API types**:
 ```go
 // pkg/api-types/instance.go
 type CreateInstanceRequest struct {
     Name        string `json:"name"`
-    Description string `json:"description"`  // NEW
+    Description string `json:"description,omitempty"`  // NEW
+}
+```
+
+3. **Update handler to pass description to CRD**:
+```go
+// server/api/handlers.go - in CreateInstance handler
+instance := &v1.SupabaseInstance{
+    Spec: v1.SupabaseInstanceSpec{
+        ProjectName: req.Name,
+        Description: req.Description,  // NEW
+        // ... other fields
+    },
 }
 ```
 
