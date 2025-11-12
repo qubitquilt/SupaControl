@@ -11,6 +11,7 @@ import (
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 )
@@ -197,6 +198,10 @@ echo "========================================"
 				},
 			},
 		},
+	}
+
+	if err := controllerutil.SetControllerReference(instance, job, r.Scheme); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	if err := r.Create(ctx, job); err != nil {
