@@ -39,14 +39,14 @@ type SupabaseInstanceReconciler struct {
 	CertManagerIssuer    string
 }
 
-// +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances,verbs=get;list;create;update;patch;delete
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
-// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is the main reconciliation loop
