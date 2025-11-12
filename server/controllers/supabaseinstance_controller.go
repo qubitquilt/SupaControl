@@ -62,7 +62,7 @@ func (r *SupabaseInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "Failed to get SupabaseInstance")
-		metrics.ReconciliationErrorsTotal.WithLabelValues("fetch").Inc()
+		metrics.ReconciliationErrorsTotal.WithLabelValues("unknown").Inc()
 		return ctrl.Result{}, err
 	}
 
