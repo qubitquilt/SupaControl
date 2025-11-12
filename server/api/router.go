@@ -11,11 +11,11 @@ import (
 // SetupRouter configures all routes for the API
 func SetupRouter(e *echo.Echo, handler *Handler, authService *auth.Service, dbClient *db.Client) {
 	// Middleware (order matters!)
-	e.Use(CorrelationIDMiddleware())   // Add request ID first
-	e.Use(MetricsMiddleware())          // Record metrics for all requests
-	e.Use(middleware.Logger())          // Log after correlation ID is set
-	e.Use(middleware.Recover())         // Recover from panics
-	e.Use(middleware.CORS())            // CORS headers
+	e.Use(CorrelationIDMiddleware()) // Add request ID first
+	e.Use(MetricsMiddleware())       // Record metrics for all requests
+	e.Use(middleware.Logger())       // Log after correlation ID is set
+	e.Use(middleware.Recover())      // Recover from panics
+	e.Use(middleware.CORS())         // CORS headers
 
 	// Public routes
 	e.GET("/healthz", handler.HealthCheck)

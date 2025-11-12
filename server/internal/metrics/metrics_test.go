@@ -50,9 +50,9 @@ func TestInstanceMetrics(t *testing.T) {
 	t.Run("InstanceCreationDuration records observations", func(t *testing.T) {
 		// Record some creation durations - verify they don't panic
 		assert.NotPanics(t, func() {
-			InstanceCreationDuration.Observe(60.0)   // 1 minute
-			InstanceCreationDuration.Observe(120.0)  // 2 minutes
-			InstanceCreationDuration.Observe(300.0)  // 5 minutes
+			InstanceCreationDuration.Observe(60.0)  // 1 minute
+			InstanceCreationDuration.Observe(120.0) // 2 minutes
+			InstanceCreationDuration.Observe(300.0) // 5 minutes
 		}, "recording histogram observations should not panic")
 	})
 }
