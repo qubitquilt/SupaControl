@@ -2,12 +2,14 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -36,6 +38,56 @@ func NewHandler(authService *auth.Service, dbClient DBClient, crClient CRClient,
 		crClient:    crClient,
 		k8sClient:   k8sClient,
 	}
+}
+
+// getInstanceNamespace returns the namespace for an instance
+// It uses the namespace from the instance status if available, otherwise generates it from the name
+func getInstanceNamespace(instance *supacontrolv1alpha1.SupabaseInstance) string {
+	if instance.Status.Namespace != "" {
+		return instance.Status.Namespace
+	}
+	return fmt.Sprintf("supa-%s", instance.Spec.ProjectName)
+}
+
+// containerLogResult holds the result of fetching logs from a container
+type containerLogResult struct {
+	podName       string
+	containerName string
+	logs          string
+	err           error
+	index         int // For maintaining order
+}
+
+// fetchContainerLogs fetches logs from a single container
+func fetchContainerLogs(ctx context.Context, clientset K8sClient, namespace, podName, containerName string, lines int64, index int) containerLogResult {
+	result := containerLogResult{
+		podName:       podName,
+		containerName: containerName,
+		index:         index,
+	}
+
+	logOptions := &corev1.PodLogOptions{
+		Container: containerName,
+		TailLines: &lines,
+	}
+
+	req := clientset.GetClientset().CoreV1().Pods(namespace).GetLogs(podName, logOptions)
+	podLogs, err := req.Stream(ctx)
+	if err != nil {
+		result.err = err
+		return result
+	}
+	defer podLogs.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, podLogs)
+	if err != nil {
+		result.err = err
+		return result
+	}
+
+	result.logs = buf.String()
+	return result
 }
 
 // Health check endpoint
@@ -415,10 +467,7 @@ func (h *Handler) RestartInstance(c echo.Context) error {
 	}
 
 	// Get the namespace
-	namespace := instance.Status.Namespace
-	if namespace == "" {
-		namespace = fmt.Sprintf("supa-%s", name)
-	}
+	namespace := getInstanceNamespace(instance)
 
 	// Get all deployments in the namespace and restart them by adding an annotation
 	clientset := h.k8sClient.GetClientset()
@@ -456,7 +505,7 @@ func (h *Handler) RestartInstance(c echo.Context) error {
 	})
 }
 
-// GetLogs retrieves logs from instance pods
+// GetLogs retrieves logs from instance pods using concurrent fetching for better performance
 func (h *Handler) GetLogs(c echo.Context) error {
 	name := c.Param("name")
 	ctx := c.Request().Context()
@@ -482,10 +531,7 @@ func (h *Handler) GetLogs(c echo.Context) error {
 	}
 
 	// Get the namespace
-	namespace := instance.Status.Namespace
-	if namespace == "" {
-		namespace = fmt.Sprintf("supa-%s", name)
-	}
+	namespace := getInstanceNamespace(instance)
 
 	// Get all pods in the namespace
 	clientset := h.k8sClient.GetClientset()
@@ -499,40 +545,69 @@ func (h *Handler) GetLogs(c echo.Context) error {
 		return c.String(http.StatusOK, "No pods found for this instance\n")
 	}
 
-	// Aggregate logs from all pods
-	var aggregatedLogs strings.Builder
-
+	// Count total containers to fetch logs from
+	totalContainers := 0
 	for _, pod := range pods.Items {
-		aggregatedLogs.WriteString(fmt.Sprintf("=== Logs from pod: %s ===\n", pod.Name))
+		totalContainers += len(pod.Spec.Containers)
+	}
 
-		// Get logs for each container in the pod
+	// Fetch logs concurrently from all containers
+	var wg sync.WaitGroup
+	resultsChan := make(chan containerLogResult, totalContainers)
+
+	index := 0
+	for _, pod := range pods.Items {
 		for _, container := range pod.Spec.Containers {
-			aggregatedLogs.WriteString(fmt.Sprintf("--- Container: %s ---\n", container.Name))
+			wg.Add(1)
+			go func(p corev1.Pod, c corev1.Container, idx int) {
+				defer wg.Done()
+				result := fetchContainerLogs(ctx, h.k8sClient, namespace, p.Name, c.Name, lines, idx)
+				resultsChan <- result
+			}(pod, container, index)
+			index++
+		}
+	}
 
-			logOptions := &corev1.PodLogOptions{
-				Container: container.Name,
-				TailLines: &lines,
+	// Close the results channel once all goroutines complete
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results and sort by index to maintain order
+	results := make([]containerLogResult, 0, totalContainers)
+	for result := range resultsChan {
+		results = append(results, result)
+	}
+
+	// Sort results by index to maintain the original pod/container order
+	// Using a simple bubble sort for small arrays (most instances won't have many containers)
+	for i := 0; i < len(results); i++ {
+		for j := i + 1; j < len(results); j++ {
+			if results[i].index > results[j].index {
+				results[i], results[j] = results[j], results[i]
 			}
+		}
+	}
 
-			req := clientset.CoreV1().Pods(namespace).GetLogs(pod.Name, logOptions)
-			podLogs, err := req.Stream(ctx)
-			if err != nil {
-				aggregatedLogs.WriteString(fmt.Sprintf("Error getting logs: %v\n", err))
-				continue
-			}
+	// Build the aggregated logs output
+	var aggregatedLogs strings.Builder
+	currentPod := ""
+	for _, result := range results {
+		// Add pod header if this is a new pod
+		if result.podName != currentPod {
+			aggregatedLogs.WriteString(fmt.Sprintf("=== Logs from pod: %s ===\n", result.podName))
+			currentPod = result.podName
+		}
 
-			buf := new(bytes.Buffer)
-			_, err = io.Copy(buf, podLogs)
-			podLogs.Close()
-			if err != nil {
-				aggregatedLogs.WriteString(fmt.Sprintf("Error reading logs: %v\n", err))
-				continue
-			}
+		aggregatedLogs.WriteString(fmt.Sprintf("--- Container: %s ---\n", result.containerName))
 
-			aggregatedLogs.WriteString(buf.String())
+		if result.err != nil {
+			aggregatedLogs.WriteString(fmt.Sprintf("Error getting logs: %v\n", result.err))
+		} else {
+			aggregatedLogs.WriteString(result.logs)
 			aggregatedLogs.WriteString("\n")
 		}
-		aggregatedLogs.WriteString("\n")
 	}
 
 	return c.String(http.StatusOK, aggregatedLogs.String())
