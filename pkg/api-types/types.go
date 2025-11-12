@@ -42,13 +42,13 @@ type CreateAPIKeyResponse struct {
 
 // APIKey represents an API key
 type APIKey struct {
-	ID         int64      `json:"id"`
-	UserID     int64      `json:"user_id"`
-	Name       string     `json:"name"`
-	Hash       string     `json:"hash"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	ID        int64      `json:"id" db:"id"`
+	UserID    int64      `json:"user_id" db:"user_id"`
+	Name      string     `json:"name" db:"name"`
+	KeyHash   string     `json:"key_hash" db:"key_hash"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at" db:"expires_at"`
+	LastUsed  *time.Time `json:"last_used" db:"last_used"`
 }
 
 // ListAPIKeysResponse represents a list API keys response
