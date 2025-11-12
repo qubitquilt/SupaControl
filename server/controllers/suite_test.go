@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -122,8 +123,8 @@ func createTestReconciler() *SupabaseInstanceReconciler {
 	}
 }
 
-// Global counter for unique suffix generation
-var nameSuffixCounter int64 = 0
+// Global counter for unique suffix generation (atomic for thread safety)
+var nameSuffixCounter atomic.Int64
 
 // Helper function to create a basic SupabaseInstance
 func createBasicInstance(name string) *supacontrolv1alpha1.SupabaseInstance {
@@ -137,8 +138,7 @@ func createBasicInstance(name string) *supacontrolv1alpha1.SupabaseInstance {
 	// Create a unique suffix using time and counter
 	// Format time as hex and append counter
 	timeHex := fmt.Sprintf("%x", now.UnixNano())[:10] // Use first 10 chars of time hex
-	counter := nameSuffixCounter
-	nameSuffixCounter++ // Increment for next call
+	counter := nameSuffixCounter.Add(1) - 1           // Atomic increment and get previous value
 
 	// Combine hash, time, and counter for absolute uniqueness
 	// Format: t-{hash}-{timeHex}-{counter} where:
