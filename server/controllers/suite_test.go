@@ -122,19 +122,33 @@ func createTestReconciler() *SupabaseInstanceReconciler {
 	}
 }
 
+// Global counter for unique suffix generation
+var nameSuffixCounter int64 = 0
+
 // Helper function to create a basic SupabaseInstance
 func createBasicInstance(name string) *supacontrolv1alpha1.SupabaseInstance {
 	// Create a short, unique identifier based on the test name
 	// Use hash of test name for uniqueness but keep it short
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:6]
 
-	// Add a short timestamp for additional uniqueness but keep total under 63 chars
-	timestamp := time.Now().Unix() % 10000 // Use last 4 digits of timestamp to keep it short
+	// Use nanosecond timestamp and an incrementing counter for absolute uniqueness
+	now := time.Now()
 
-	// Generate project name that will result in job names under 63 chars
-	// Job name pattern: "supacontrol-provision-{projectName}"
-	// Max project name should be: 63 - len("supacontrol-provision-") = 63 - 24 = 39 chars
-	projectName := fmt.Sprintf("t-%s-%d", hash, timestamp)
+	// Create a unique suffix using time and counter
+	// Format time as hex and append counter
+	timeHex := fmt.Sprintf("%x", now.UnixNano())[:10] // Use first 10 chars of time hex
+	counter := nameSuffixCounter
+	nameSuffixCounter++ // Increment for next call
+
+	// Combine hash, time, and counter for absolute uniqueness
+	// Format: t-{hash}-{timeHex}-{counter} where:
+	// - hash: 6 chars (from test name)
+	// - separator: 1 char ("-")
+	// - timeHex: 10 chars (from nanosecond timestamp)
+	// - separator: 1 char ("-")
+	// - counter: variable length (but we keep it short)
+	// Total: 2 + 6 + 1 + 10 + 1 + ~3 = ~23 chars (well under 39 char limit)
+	projectName := fmt.Sprintf("t-%s-%s-%d", hash, timeHex, counter)
 
 	return &supacontrolv1alpha1.SupabaseInstance{
 		ObjectMeta: ctrl.ObjectMeta{
