@@ -19,11 +19,12 @@ import (
 
 // TestReconcilePending_CreatesProvisioningJob tests that reconciling a Pending instance creates a provisioning Job
 func TestReconcilePending_CreatesProvisioningJob(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create a test instance
-	instance := createBasicInstance("test-pending-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -36,7 +37,7 @@ func TestReconcilePending_CreatesProvisioningJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First reconcile failed: %v", err)
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		t.Error("Expected first reconcile to requeue")
 	}
 
@@ -54,7 +55,7 @@ func TestReconcilePending_CreatesProvisioningJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second reconcile failed: %v", err)
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		t.Error("Expected second reconcile to requeue")
 	}
 
@@ -115,11 +116,12 @@ func TestReconcilePending_CreatesProvisioningJob(t *testing.T) {
 
 // TestReconcileProvisioning_TransitionsToInProgress tests transition from Provisioning to ProvisioningInProgress
 func TestReconcileProvisioning_TransitionsToInProgress(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create a test instance in Provisioning phase
-	instance := createBasicInstance("test-provisioning-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -191,11 +193,12 @@ func TestReconcileProvisioning_TransitionsToInProgress(t *testing.T) {
 
 // TestReconcileProvisioningInProgress_HandlesJobSuccess tests transition to Running when Job succeeds
 func TestReconcileProvisioningInProgress_HandlesJobSuccess(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create and initialize instance
-	instance := createBasicInstance("test-job-success-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -271,11 +274,12 @@ func TestReconcileProvisioningInProgress_HandlesJobSuccess(t *testing.T) {
 
 // TestReconcileProvisioningInProgress_HandlesJobFailure tests transition to Failed when Job fails
 func TestReconcileProvisioningInProgress_HandlesJobFailure(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create and initialize instance
-	instance := createBasicInstance("test-job-failure-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -361,11 +365,12 @@ func TestReconcileProvisioningInProgress_HandlesJobFailure(t *testing.T) {
 
 // TestReconcileDelete_CreatesCleanupJob tests that deleting an instance creates a cleanup Job
 func TestReconcileDelete_CreatesCleanupJob(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create and initialize instance to Running
-	instance := createBasicInstance("test-delete-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -456,11 +461,12 @@ func TestReconcileDelete_CreatesCleanupJob(t *testing.T) {
 
 // TestCleanupViaJob_TransitionsToDeletingInProgress tests cleanup Job state transitions
 func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create and prepare instance for deletion
-	instance := createBasicInstance("test-cleanup-progress-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -560,11 +566,12 @@ func TestCleanupViaJob_TransitionsToDeletingInProgress(t *testing.T) {
 
 // TestJobOwnerReferences_PreventOrphans tests that Jobs have proper owner references
 func TestJobOwnerReferences_PreventOrphans(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create instance
-	instance := createBasicInstance("test-owner-refs-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -643,11 +650,12 @@ func TestJobOwnerReferences_PreventOrphans(t *testing.T) {
 
 // TestReconcilePaused_SkipsReconciliation tests that paused instances are not reconciled
 func TestReconcilePaused_SkipsReconciliation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create instance with paused=true
-	instance := createBasicInstance("test-paused-001")
+	instance := createBasicInstance(t.Name())
 	instance.Spec.Paused = true
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
@@ -663,7 +671,7 @@ func TestReconcilePaused_SkipsReconciliation(t *testing.T) {
 	}
 
 	// Verify no requeue
-	if result.Requeue || result.RequeueAfter > 0 {
+	if result.RequeueAfter > 0 {
 		t.Error("Expected no requeue for paused instance")
 	}
 
@@ -679,11 +687,12 @@ func TestReconcilePaused_SkipsReconciliation(t *testing.T) {
 
 // TestJobTimeout_HandlesActiveDeadlineSeconds tests that Job timeouts are respected
 func TestJobTimeout_HandlesActiveDeadlineSeconds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create instance
-	instance := createBasicInstance("test-timeout-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -742,11 +751,12 @@ func TestJobTimeout_HandlesActiveDeadlineSeconds(t *testing.T) {
 
 // TestFinalizer_AddedOnCreation tests that finalizer is added to new instances
 func TestFinalizer_AddedOnCreation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create instance without finalizer
-	instance := createBasicInstance("test-finalizer-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)
@@ -781,11 +791,12 @@ func TestFinalizer_AddedOnCreation(t *testing.T) {
 
 // TestReconcileRunning_PeriodicHealthChecks tests that Running instances are periodically requeued
 func TestReconcileRunning_PeriodicHealthChecks(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reconciler := createTestReconciler()
 
 	// Create and transition instance to Running
-	instance := createBasicInstance("test-running-checks-001")
+	instance := createBasicInstance(t.Name())
 	err := k8sClient.Create(ctx, instance)
 	if err != nil {
 		t.Fatalf("Failed to create test instance: %v", err)

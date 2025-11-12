@@ -118,7 +118,7 @@ func (r *SupabaseInstanceReconciler) reconcileNormal(ctx context.Context, instan
 		}
 		// Update metrics for initial phase
 		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhasePending), supacontrolv1alpha1.AllPhases())
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// State machine based on phase
@@ -139,7 +139,7 @@ func (r *SupabaseInstanceReconciler) reconcileNormal(ctx context.Context, instan
 		if err := r.Status().Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 }
 
@@ -178,7 +178,7 @@ func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, insta
 	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseProvisioning), supacontrolv1alpha1.AllPhases())
 
 	// Requeue immediately to check Job status
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{RequeueAfter: time.Second}, nil
 }
 
 // reconcileProvisioning checks the status of the provisioning Job
@@ -198,7 +198,7 @@ func (r *SupabaseInstanceReconciler) reconcileProvisioning(ctx context.Context, 
 		if err := r.Status().Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	job, err := r.getJobStatus(ctx, jobName)
