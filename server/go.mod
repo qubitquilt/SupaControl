@@ -1,6 +1,6 @@
 module github.com/qubitquilt/supacontrol/server
 
-go 1.21
+go 1.23.0
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.0
@@ -11,7 +11,7 @@ require (
 	github.com/prometheus/client_golang v1.16.0
 	github.com/qubitquilt/supacontrol/pkg/api-types v0.0.0
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/crypto v0.35.0
+	golang.org/x/crypto v0.36.0
 	helm.sh/helm/v3 v3.13.3
 	k8s.io/api v0.28.4
 	k8s.io/apimachinery v0.28.4
@@ -126,12 +126,12 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
-	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/term v0.29.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/term v0.30.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
