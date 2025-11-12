@@ -56,7 +56,7 @@ COPY --from=go-builder /build/server/supacontrol .
 COPY --from=go-builder /build/server/internal/db/migrations ./internal/db/migrations
 
 # Copy the built UI
-COPY --from=ui-builder /build/dist ./ui/dist
+COPY --from=ui-builder /build/dist ../ui/dist
 
 # Expose port
 EXPOSE 8091
