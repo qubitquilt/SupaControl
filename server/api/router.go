@@ -33,4 +33,10 @@ func SetupRouter(e *echo.Echo, handler *Handler, authService *auth.Service, dbCl
 	api.GET("/instances", handler.ListInstances)
 	api.GET("/instances/:name", handler.GetInstance)
 	api.DELETE("/instances/:name", handler.DeleteInstance)
+
+	// Instance lifecycle endpoints
+	api.POST("/instances/:name/start", handler.StartInstance)
+	api.POST("/instances/:name/stop", handler.StopInstance)
+	api.POST("/instances/:name/restart", handler.RestartInstance)
+	api.GET("/instances/:name/logs", handler.GetLogs)
 }

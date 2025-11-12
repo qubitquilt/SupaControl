@@ -62,6 +62,11 @@ func (c *Client) GetConfig() *rest.Config {
 	return c.config
 }
 
+// GetClientset returns the Kubernetes clientset
+func (c *Client) GetClientset() kubernetes.Interface {
+	return c.clientset
+}
+
 // CreateNamespace creates a new Kubernetes namespace
 func (c *Client) CreateNamespace(ctx context.Context, name string, labels map[string]string) error {
 	namespace := &corev1.Namespace{
