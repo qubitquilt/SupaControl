@@ -36,7 +36,7 @@ func TestReconcilePending_CreatesProvisioningJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First reconcile failed: %v", err)
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		t.Error("Expected first reconcile to requeue")
 	}
 
@@ -54,7 +54,7 @@ func TestReconcilePending_CreatesProvisioningJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second reconcile failed: %v", err)
 	}
-	if !result.Requeue {
+	if result.RequeueAfter == 0 {
 		t.Error("Expected second reconcile to requeue")
 	}
 
@@ -663,7 +663,7 @@ func TestReconcilePaused_SkipsReconciliation(t *testing.T) {
 	}
 
 	// Verify no requeue
-	if result.Requeue || result.RequeueAfter > 0 {
+	if result.RequeueAfter > 0 {
 		t.Error("Expected no requeue for paused instance")
 	}
 
