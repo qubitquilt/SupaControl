@@ -44,13 +44,13 @@
     "@types/node": "^20.10.6",
     "@types/react": "^18.2.46",
     "@types/react-test-renderer": "^19.1.0",
-    "@vitest/coverage-v8": "^1.1.0",
+    "@vitest/coverage-v8": "^4.0.8",
     "esbuild": "^0.25.12",
     "ink-testing-library": "^4.0.0",
     "patch-package": "^8.0.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vitest": "^1.1.0"
+    "vitest": "^4.0.8"
   },
   "engines": {
     "node": ">=18.19.0 || >=20.6.0"
