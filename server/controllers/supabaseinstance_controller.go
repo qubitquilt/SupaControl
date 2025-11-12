@@ -27,17 +27,6 @@ const (
 	FinalizerName = "supacontrol.qubitquilt.com/finalizer"
 )
 
-// AllPhases is a list of all possible instance phases for metrics tracking
-var AllPhases = []string{
-	string(supacontrolv1alpha1.PhasePending),
-	string(supacontrolv1alpha1.PhaseProvisioning),
-	string(supacontrolv1alpha1.PhaseProvisioningInProgress),
-	string(supacontrolv1alpha1.PhaseRunning),
-	string(supacontrolv1alpha1.PhaseFailed),
-	string(supacontrolv1alpha1.PhaseDeleting),
-	string(supacontrolv1alpha1.PhaseDeletingInProgress),
-}
-
 // SupabaseInstanceReconciler reconciles a SupabaseInstance object
 type SupabaseInstanceReconciler struct {
 	client.Client
@@ -128,7 +117,7 @@ func (r *SupabaseInstanceReconciler) reconcileNormal(ctx context.Context, instan
 			return ctrl.Result{}, err
 		}
 		// Update metrics for initial phase
-		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhasePending), AllPhases)
+		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhasePending), supacontrolv1alpha1.AllPhases())
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -186,7 +175,7 @@ func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, insta
 	}
 
 	// Update metrics
-	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseProvisioning), AllPhases)
+	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseProvisioning), supacontrolv1alpha1.AllPhases())
 
 	// Requeue immediately to check Job status
 	return ctrl.Result{Requeue: true}, nil
@@ -241,7 +230,7 @@ func (r *SupabaseInstanceReconciler) reconcileProvisioning(ctx context.Context, 
 		}
 
 		// Update metrics
-		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseProvisioningInProgress), AllPhases)
+		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseProvisioningInProgress), supacontrolv1alpha1.AllPhases())
 
 		// Requeue to check status again
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
@@ -349,7 +338,7 @@ func (r *SupabaseInstanceReconciler) transitionToRunning(ctx context.Context, in
 	}
 
 	// Update metrics
-	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseRunning), AllPhases)
+	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseRunning), supacontrolv1alpha1.AllPhases())
 	metrics.JobStatusTotal.WithLabelValues("provision", "succeeded").Inc()
 
 	// Requeue with delay for periodic health checks
@@ -398,7 +387,7 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 				return ctrl.Result{}, err
 			}
 			// Update metrics for Deleting phase
-			metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseDeleting), AllPhases)
+			metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseDeleting), supacontrolv1alpha1.AllPhases())
 		}
 
 		// Perform cleanup via Job
@@ -415,7 +404,7 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 
 		// Update metrics - instance is being deleted
 		metrics.InstancesTotal.Dec()
-		metrics.DeleteInstanceMetrics(instance.Spec.ProjectName, AllPhases)
+		metrics.DeleteInstanceMetrics(instance.Spec.ProjectName, supacontrolv1alpha1.AllPhases())
 	}
 
 	return ctrl.Result{}, nil
@@ -481,7 +470,7 @@ func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance
 			return err
 		}
 		// Update metrics for DeletingInProgress phase
-		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseDeletingInProgress), AllPhases)
+		metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseDeletingInProgress), supacontrolv1alpha1.AllPhases())
 	}
 
 	logger.V(1).Info("Cleanup Job still running", "jobName", jobName, "active", job.Status.Active)
@@ -610,7 +599,7 @@ func (r *SupabaseInstanceReconciler) transitionToFailed(ctx context.Context, ins
 	}
 
 	// Update metrics
-	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseFailed), AllPhases)
+	metrics.SetInstanceStatus(instance.Spec.ProjectName, string(supacontrolv1alpha1.PhaseFailed), supacontrolv1alpha1.AllPhases())
 	metrics.JobStatusTotal.WithLabelValues("provision", "failed").Inc()
 
 	// Requeue with delay for periodic monitoring of failed state

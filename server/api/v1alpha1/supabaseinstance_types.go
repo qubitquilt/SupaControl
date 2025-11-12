@@ -55,6 +55,20 @@ const (
 	PhaseFailed SupabaseInstancePhase = "Failed"
 )
 
+// AllPhases returns a slice of all possible SupabaseInstance phases as strings.
+// This is the canonical source of truth for phase enumeration used by metrics and other components.
+func AllPhases() []string {
+	return []string{
+		string(PhasePending),
+		string(PhaseProvisioning),
+		string(PhaseProvisioningInProgress),
+		string(PhaseRunning),
+		string(PhaseDeleting),
+		string(PhaseDeletingInProgress),
+		string(PhaseFailed),
+	}
+}
+
 // SupabaseInstanceStatus defines the observed state of SupabaseInstance
 type SupabaseInstanceStatus struct {
 	// Phase represents the current phase of the instance
