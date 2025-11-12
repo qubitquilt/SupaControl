@@ -127,7 +127,7 @@ func createBasicInstance(name string) *supacontrolv1alpha1.SupabaseInstance {
 	sanitizedName := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
 	sanitizedName = strings.ReplaceAll(sanitizedName, "/", "-")
 	sanitizedName = fmt.Sprintf("test-%s-%d", sanitizedName, time.Now().UnixNano())
-	
+
 	return &supacontrolv1alpha1.SupabaseInstance{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name: sanitizedName,
