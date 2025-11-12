@@ -11,6 +11,8 @@ import (
 	apitypes "github.com/qubitquilt/supacontrol/pkg/api-types"
 	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
 	"github.com/qubitquilt/supacontrol/server/internal/db"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 // mockDBClient is a mock implementation of DBClient for testing
@@ -131,6 +133,18 @@ func (m *mockCRClient) DeleteSupabaseInstance(ctx context.Context, name string) 
 		return m.deleteSupabaseInstanceFunc(ctx, name)
 	}
 	return fmt.Errorf("DeleteSupabaseInstance not implemented")
+}
+
+// mockK8sClient is a mock implementation of the K8sClient interface for testing
+type mockK8sClient struct {
+	clientset kubernetes.Interface
+}
+
+func (m *mockK8sClient) GetClientset() kubernetes.Interface {
+	if m.clientset != nil {
+		return m.clientset
+	}
+	return &fake.Clientset{}
 }
 
 // newTestContext creates a test echo context with the given method, path, and body
