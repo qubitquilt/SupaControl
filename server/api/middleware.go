@@ -15,6 +15,9 @@ import (
 	"github.com/qubitquilt/supacontrol/server/internal/metrics"
 )
 
+// loggerKey is a private type for context keys to prevent collisions
+type loggerKey struct{}
+
 // AuthContext holds authentication information
 type AuthContext struct {
 	UserID   int64
@@ -167,8 +170,8 @@ func CorrelationIDMiddleware() echo.MiddlewareFunc {
 				"path", c.Request().URL.Path,
 			)
 
-			// Store logger in context for use in handlers
-			ctx := context.WithValue(c.Request().Context(), "logger", logger)
+			// Store logger in context for use in handlers using typed key
+			ctx := context.WithValue(c.Request().Context(), loggerKey{}, logger)
 			c.SetRequest(c.Request().WithContext(ctx))
 
 			// Log the incoming request
@@ -183,7 +186,7 @@ func CorrelationIDMiddleware() echo.MiddlewareFunc {
 
 // GetLogger retrieves the structured logger from the request context
 func GetLogger(c echo.Context) *slog.Logger {
-	if logger, ok := c.Request().Context().Value("logger").(*slog.Logger); ok {
+	if logger, ok := c.Request().Context().Value(loggerKey{}).(*slog.Logger); ok {
 		return logger
 	}
 	// Fallback to default logger
