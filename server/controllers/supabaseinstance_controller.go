@@ -7,7 +7,6 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -41,8 +40,8 @@ type SupabaseInstanceReconciler struct {
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=supacontrol.qubitquilt.com,resources=supabaseinstances/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
@@ -563,8 +562,5 @@ func (r *SupabaseInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&supacontrolv1alpha1.SupabaseInstance{}).
 		Owns(&batchv1.Job{}).
-		Owns(&corev1.Namespace{}).
-		Owns(&corev1.Secret{}).
-		Owns(&networkingv1.Ingress{}).
 		Complete(r)
 }

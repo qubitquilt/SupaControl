@@ -52,6 +52,20 @@ rules:
       - patch
       - delete
 
+  # Secret permissions (for creating Supabase secrets)
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+
   # RBAC permissions to create namespace-scoped Roles and RoleBindings
   # This allows the controller to create Roles in instance namespaces for least privilege
   - apiGroups:
@@ -59,6 +73,35 @@ rules:
     resources:
       - roles
       - rolebindings
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+
+  # Job permissions (for provisioning and cleanup jobs)
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+      - jobs/status
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+
+  # Ingress permissions (for creating ingress resources)
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
     verbs:
       - get
       - list

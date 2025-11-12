@@ -10,7 +10,19 @@ import (
 	"syscall"
 	"time"
 
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+
 	"github.com/labstack/echo/v4"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -75,19 +87,32 @@ func run() error {
 	// Set up controller manager
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	// Create a comprehensive scheme for the controller manager
+	// Use the client-go scheme as the base since it includes all standard Kubernetes API groups
+	ctrlScheme := scheme.Scheme
+
+	// Register all additional API groups that might be needed
+	utilruntime.Must(appsv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(autoscalingv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(batchv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(coordinationv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(networkingv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(policyv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(rbacv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(schedulingv1.AddToScheme(ctrlScheme))
+	utilruntime.Must(storagev1.AddToScheme(ctrlScheme))
+
+	// Custom Resource Definitions
+	utilruntime.Must(supacontrolv1alpha1.AddToScheme(ctrlScheme))
+
 	mgr, err := ctrl.NewManager(k8sClient.GetConfig(), ctrl.Options{
-		Scheme: crClient.GetScheme(),
+		Scheme: ctrlScheme,
 		// LeaderElection for HA deployments (configured via LEADER_ELECTION_ENABLED env var)
 		LeaderElection:   cfg.LeaderElectionEnabled,
 		LeaderElectionID: "supacontrol-leader-election",
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create controller manager: %w", err)
-	}
-
-	// Register the CRD scheme
-	if err := supacontrolv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
-		return fmt.Errorf("failed to add scheme: %w", err)
 	}
 
 	// Set up the controller
