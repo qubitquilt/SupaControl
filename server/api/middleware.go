@@ -1,13 +1,18 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/qubitquilt/supacontrol/server/internal/auth"
 	"github.com/qubitquilt/supacontrol/server/internal/db"
+	"github.com/qubitquilt/supacontrol/server/internal/metrics"
 )
 
 // AuthContext holds authentication information
@@ -141,5 +146,109 @@ func RequireAdmin(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		return next(c)
+	}
+}
+
+// CorrelationIDMiddleware generates a unique request ID for each request
+// and adds it to the response header and logger context for tracing
+func CorrelationIDMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Generate a unique request ID
+			requestID := uuid.New().String()
+
+			// Add to response header for client tracking
+			c.Response().Header().Set("X-Request-ID", requestID)
+
+			// Create a structured logger with the request ID
+			logger := slog.With(
+				"request_id", requestID,
+				"method", c.Request().Method,
+				"path", c.Request().URL.Path,
+			)
+
+			// Store logger in context for use in handlers
+			ctx := context.WithValue(c.Request().Context(), "logger", logger)
+			c.SetRequest(c.Request().WithContext(ctx))
+
+			// Log the incoming request
+			logger.Info("incoming request",
+				"remote_addr", c.RealIP(),
+			)
+
+			return next(c)
+		}
+	}
+}
+
+// GetLogger retrieves the structured logger from the request context
+func GetLogger(c echo.Context) *slog.Logger {
+	if logger, ok := c.Request().Context().Value("logger").(*slog.Logger); ok {
+		return logger
+	}
+	// Fallback to default logger
+	return slog.Default()
+}
+
+// MetricsMiddleware records API metrics for all requests
+func MetricsMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+
+			// Extract endpoint pattern (e.g., /api/v1/instances/:name)
+			endpoint := c.Path()
+			method := c.Request().Method
+
+			// Call the next handler
+			err := next(c)
+
+			// Calculate duration
+			duration := time.Since(start).Seconds()
+
+			// Get status code
+			statusCode := c.Response().Status
+			if statusCode == 0 {
+				statusCode = http.StatusOK
+			}
+
+			// If there was an error, extract status code
+			if err != nil {
+				if he, ok := err.(*echo.HTTPError); ok {
+					statusCode = he.Code
+				} else {
+					statusCode = http.StatusInternalServerError
+				}
+			}
+
+			// Record metrics
+			metrics.APIRequestsTotal.WithLabelValues(
+				endpoint,
+				method,
+				http.StatusText(statusCode),
+			).Inc()
+
+			metrics.APIRequestDuration.WithLabelValues(
+				endpoint,
+				method,
+			).Observe(duration)
+
+			// Log the response
+			logger := GetLogger(c)
+			logger.Info("request completed",
+				"status", statusCode,
+				"duration_ms", duration*1000,
+			)
+
+			return err
+		}
+	}
+}
+
+// ObserveHistogram is a helper to time operations and record to a histogram
+func ObserveHistogram(histogram prometheus.Observer) func() {
+	start := time.Now()
+	return func() {
+		histogram.Observe(time.Since(start).Seconds())
 	}
 }

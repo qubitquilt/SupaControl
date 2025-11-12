@@ -4,10 +4,13 @@ go 1.24.7
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/google/uuid v1.3.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/labstack/echo/v4 v4.11.4
 	github.com/lib/pq v1.10.9
+	github.com/prometheus/client_golang v1.16.0
 	github.com/qubitquilt/supacontrol/pkg/api-types v0.0.0
+	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.17.0
 	helm.sh/helm/v3 v3.13.3
 	k8s.io/api v0.28.4
