@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -287,7 +286,7 @@ func (h *Handler) CreateInstance(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusConflict, "instance with this name already exists")
 	}
 	if !apierrors.IsNotFound(err) {
-		slog.Error("Failed to check instance existence", "error", err)
+		GetLogger(c).Error("Failed to check instance existence", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to check instance existence")
 	}
 
@@ -305,12 +304,12 @@ func (h *Handler) CreateInstance(c echo.Context) error {
 	}
 
 	if err := h.crClient.CreateSupabaseInstance(ctx, instance); err != nil {
-		slog.Error("Failed to create SupabaseInstance CR", "error", err)
+		GetLogger(c).Error("Failed to create SupabaseInstance CR", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create instance")
 	}
 
 	// Convert CR to API response
-	apiInstance := h.convertCRToAPIType(instance)
+	apiInstance := h.convertCRToAPIType(c, instance)
 
 	return c.JSON(http.StatusAccepted, apitypes.CreateInstanceResponse{
 		Instance: apiInstance,
@@ -324,14 +323,14 @@ func (h *Handler) ListInstances(c echo.Context) error {
 
 	crList, err := h.crClient.ListSupabaseInstances(ctx)
 	if err != nil {
-		slog.Error("Failed to list instances", "error", err)
+		GetLogger(c).Error("Failed to list instances", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list instances")
 	}
 
 	// Convert CRs to API types
 	instances := make([]*apitypes.Instance, 0, len(crList.Items))
 	for i := range crList.Items {
-		instances = append(instances, h.convertCRToAPIType(&crList.Items[i]))
+		instances = append(instances, h.convertCRToAPIType(c, &crList.Items[i]))
 	}
 
 	return c.JSON(http.StatusOK, apitypes.ListInstancesResponse{
@@ -350,12 +349,12 @@ func (h *Handler) GetInstance(c echo.Context) error {
 		if apierrors.IsNotFound(err) {
 			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
 		}
-		slog.Error("Failed to get instance", "error", err)
+		GetLogger(c).Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
 	return c.JSON(http.StatusOK, apitypes.GetInstanceResponse{
-		Instance: h.convertCRToAPIType(instance),
+		Instance: h.convertCRToAPIType(c, instance),
 	})
 }
 
@@ -370,13 +369,13 @@ func (h *Handler) DeleteInstance(c echo.Context) error {
 		if apierrors.IsNotFound(err) {
 			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
 		}
-		slog.Error("Failed to get instance", "error", err)
+		GetLogger(c).Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
 	// Delete SupabaseInstance CR (controller will handle cleanup via finalizer)
 	if err := h.crClient.DeleteSupabaseInstance(ctx, name); err != nil {
-		slog.Error("Failed to delete SupabaseInstance CR", "error", err)
+		GetLogger(c).Error("Failed to delete SupabaseInstance CR", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete instance")
 	}
 
@@ -396,7 +395,7 @@ func (h *Handler) StartInstance(c echo.Context) error {
 		if apierrors.IsNotFound(err) {
 			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
 		}
-		slog.Error("Failed to get instance", "error", err)
+		GetLogger(c).Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
@@ -408,7 +407,7 @@ func (h *Handler) StartInstance(c echo.Context) error {
 	// Update the instance to set Paused=false
 	instance.Spec.Paused = false
 	if err := h.crClient.UpdateSupabaseInstance(ctx, instance); err != nil {
-		slog.Error("Failed to start instance", "error", err)
+		GetLogger(c).Error("Failed to start instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start instance")
 	}
 
@@ -429,7 +428,7 @@ func (h *Handler) StopInstance(c echo.Context) error {
 		if apierrors.IsNotFound(err) {
 			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
 		}
-		slog.Error("Failed to get instance", "error", err)
+		GetLogger(c).Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
@@ -441,7 +440,7 @@ func (h *Handler) StopInstance(c echo.Context) error {
 	// Update the instance to set Paused=true
 	instance.Spec.Paused = true
 	if err := h.crClient.UpdateSupabaseInstance(ctx, instance); err != nil {
-		slog.Error("Failed to stop instance", "error", err)
+		GetLogger(c).Error("Failed to stop instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to stop instance")
 	}
 
@@ -462,7 +461,7 @@ func (h *Handler) RestartInstance(c echo.Context) error {
 		if apierrors.IsNotFound(err) {
 			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
 		}
-		slog.Error("Failed to get instance", "error", err)
+		GetLogger(c).Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
@@ -473,7 +472,7 @@ func (h *Handler) RestartInstance(c echo.Context) error {
 	clientset := h.k8sClient.GetClientset()
 	deployments, err := clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		slog.Error("Failed to list deployments", "error", err)
+		GetLogger(c).Error("Failed to list deployments", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to restart instance")
 	}
 
@@ -488,7 +487,7 @@ func (h *Handler) RestartInstance(c echo.Context) error {
 
 		_, err = clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
 		if err != nil {
-			slog.Error("Failed to restart deployment", "deployment", deployment.Name, "error", err)
+			GetLogger(c).Error("Failed to restart deployment", "deployment", deployment.Name, "error", err)
 			continue
 		}
 		restartedCount++
@@ -526,7 +525,7 @@ func (h *Handler) GetLogs(c echo.Context) error {
 		if apierrors.IsNotFound(err) {
 			return echo.NewHTTPError(http.StatusNotFound, "instance not found")
 		}
-		slog.Error("Failed to get instance", "error", err)
+		GetLogger(c).Error("Failed to get instance", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance")
 	}
 
@@ -537,7 +536,7 @@ func (h *Handler) GetLogs(c echo.Context) error {
 	clientset := h.k8sClient.GetClientset()
 	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		slog.Error("Failed to list pods", "error", err)
+		GetLogger(c).Error("Failed to list pods", "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get logs")
 	}
 
@@ -614,7 +613,7 @@ func (h *Handler) GetLogs(c echo.Context) error {
 }
 
 // convertCRToAPIType converts a SupabaseInstance CR to API type
-func (h *Handler) convertCRToAPIType(cr *supacontrolv1alpha1.SupabaseInstance) *apitypes.Instance {
+func (h *Handler) convertCRToAPIType(c echo.Context, cr *supacontrolv1alpha1.SupabaseInstance) *apitypes.Instance {
 	// Map CR phase to API status
 	var status apitypes.InstanceStatus
 	switch cr.Status.Phase {
@@ -630,7 +629,7 @@ func (h *Handler) convertCRToAPIType(cr *supacontrolv1alpha1.SupabaseInstance) *
 		status = apitypes.StatusFailed
 	default:
 		// Unknown phase - log warning and default to Provisioning
-		slog.Warn("Unknown SupabaseInstance phase encountered",
+		GetLogger(c).Warn("Unknown SupabaseInstance phase encountered",
 			"projectName", cr.Spec.ProjectName,
 			"phase", cr.Status.Phase,
 			"defaulting_to", apitypes.StatusProvisioning)
