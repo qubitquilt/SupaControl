@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -121,14 +123,39 @@ func createTestReconciler() *SupabaseInstanceReconciler {
 	}
 }
 
+// Global counter for unique suffix generation (atomic for thread safety)
+var nameSuffixCounter atomic.Int64
+
 // Helper function to create a basic SupabaseInstance
 func createBasicInstance(name string) *supacontrolv1alpha1.SupabaseInstance {
+	// Create a short, unique identifier based on the test name
+	// Use hash of test name for uniqueness but keep it short
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:6]
+
+	// Use nanosecond timestamp and an incrementing counter for absolute uniqueness
+	now := time.Now()
+
+	// Create a unique suffix using time and counter
+	// Format time as hex and append counter
+	timeHex := fmt.Sprintf("%x", now.UnixNano())[:10] // Use first 10 chars of time hex
+	counter := nameSuffixCounter.Add(1) - 1           // Atomic increment and get previous value
+
+	// Combine hash, time, and counter for absolute uniqueness
+	// Format: t-{hash}-{timeHex}-{counter} where:
+	// - hash: 6 chars (from test name)
+	// - separator: 1 char ("-")
+	// - timeHex: 10 chars (from nanosecond timestamp)
+	// - separator: 1 char ("-")
+	// - counter: variable length (but we keep it short)
+	// Total: 2 + 6 + 1 + 10 + 1 + ~3 = ~23 chars (well under 39 char limit)
+	projectName := fmt.Sprintf("t-%s-%s-%d", hash, timeHex, counter)
+
 	return &supacontrolv1alpha1.SupabaseInstance{
 		ObjectMeta: ctrl.ObjectMeta{
-			Name: name,
+			Name: projectName,
 		},
 		Spec: supacontrolv1alpha1.SupabaseInstanceSpec{
-			ProjectName: name,
+			ProjectName: projectName,
 		},
 	}
 }
@@ -242,4 +269,114 @@ func setJobSucceeded(ctx context.Context, t *testing.T, jobName string) {
 	if err != nil {
 		t.Fatalf("Failed to update Job status to succeeded: %v", err)
 	}
+}
+
+// TestCreateBasicInstance_NameLengthCompliance tests that generated names comply with Kubernetes limits
+func TestCreateBasicInstance_NameLengthCompliance(t *testing.T) {
+	// Test the problematic test names mentioned in the CI output
+	testNames := []string{
+		"TestReconcilePending_CreatesProvisioningJob",
+		"TestReconcileProvisioning_TransitionsToInProgress",
+		"TestJobTimeout_HandlesActiveDeadlineSeconds",
+		"TestJobOwnerReferences_PreventOrphans",
+		"TestCleanupViaJob_TransitionsToDeletingInProgress",
+		"TestReconcileDelete_CreatesCleanupJob",
+		"TestReconcileProvisioningInProgress_HandlesJobSuccess",
+		"TestReconcileProvisioningInProgress_HandlesJobFailure",
+		"TestReconcilePaused_SkipsReconciliation",
+		"TestFinalizer_AddedOnCreation",
+		"TestReconcileRunning_PeriodicHealthChecks",
+	}
+
+	maxNameLength := 0
+	maxJobNameLength := 0
+
+	for _, testName := range testNames {
+		// Use the actual createBasicInstance function
+		instance := createBasicInstance(testName)
+
+		provisionJobName := fmt.Sprintf("supacontrol-provision-%s", instance.Spec.ProjectName)
+		cleanupJobName := fmt.Sprintf("supacontrol-cleanup-%s", instance.Spec.ProjectName)
+
+		maxNameLength = max(maxNameLength, len(instance.Spec.ProjectName))
+		maxJobNameLength = max(maxJobNameLength, len(provisionJobName))
+		maxJobNameLength = max(maxJobNameLength, len(cleanupJobName))
+
+		t.Logf("Test: %s", testName)
+		t.Logf("  Project Name: %s (%d chars)", instance.Spec.ProjectName, len(instance.Spec.ProjectName))
+		t.Logf("  Provision Job: %s (%d chars)", provisionJobName, len(provisionJobName))
+		t.Logf("  Cleanup Job: %s (%d chars)", cleanupJobName, len(cleanupJobName))
+
+		if len(provisionJobName) > 63 {
+			t.Errorf("Provision Job name exceeds 63 chars: %s", provisionJobName)
+		}
+		if len(cleanupJobName) > 63 {
+			t.Errorf("Cleanup Job name exceeds 63 chars: %s", cleanupJobName)
+		}
+	}
+
+	t.Logf("Maximum project name length: %d (limit: 63)", maxNameLength)
+	t.Logf("Maximum job name length: %d (limit: 63)", maxJobNameLength)
+
+	if maxJobNameLength > 63 {
+		t.Errorf("FAILURE: Some job names exceed 63 characters! Max: %d", maxJobNameLength)
+	} else {
+		t.Logf("SUCCESS: All job names comply with Kubernetes 63-character label limit!")
+	}
+}
+
+// TestCreateBasicInstance_Uniqueness tests that generated names are unique
+func TestCreateBasicInstance_Uniqueness(t *testing.T) {
+	instance1 := createBasicInstance("TestSameName")
+	instance2 := createBasicInstance("TestSameName")
+
+	if instance1.Spec.ProjectName == instance2.Spec.ProjectName {
+		t.Errorf("Generated names should be unique: %s == %s",
+			instance1.Spec.ProjectName, instance2.Spec.ProjectName)
+	}
+
+	t.Logf("Instance 1: %s", instance1.Spec.ProjectName)
+	t.Logf("Instance 2: %s", instance2.Spec.ProjectName)
+}
+
+// TestCreateBasicInstance_NameSanitization tests that names are properly sanitized
+func TestCreateBasicInstance_NameSanitization(t *testing.T) {
+	// Test with problematic characters
+	instance := createBasicInstance("Test/With\\Special!Chars@And_Long_Name_That_Would_Exceed_Limits")
+
+	// Should contain only lowercase letters, numbers, hyphens
+	if !isValidK8sName(instance.Spec.ProjectName) {
+		t.Errorf("Generated name is not a valid Kubernetes resource name: %s", instance.Spec.ProjectName)
+	}
+
+	// Should start with letter (our prefix "t-" ensures this)
+	if !strings.HasPrefix(instance.Spec.ProjectName, "t-") {
+		t.Errorf("Generated name should start with 't-': %s", instance.Spec.ProjectName)
+	}
+
+	t.Logf("Sanitized name: %s", instance.Spec.ProjectName)
+}
+
+// Helper function to check if a name is valid for Kubernetes
+func isValidK8sName(name string) bool {
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+
+	// Kubernetes resource names must start and end with alphanumeric
+	// and can contain hyphens in between
+	for i, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || (c == '-' && i > 0 && i < len(name)-1)) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
