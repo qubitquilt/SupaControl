@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/qubitquilt/supacontrol/server/internal/metrics"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -114,14 +116,14 @@ func TestGetLogger(t *testing.T) {
 func TestMetricsMiddleware(t *testing.T) {
 	t.Run("records metrics for successful request", func(t *testing.T) {
 		e := echo.New()
-		e.GET("/test", func(c echo.Context) error {
-			return c.String(http.StatusOK, "success")
-		})
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test-success", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetPath("/test")
+		c.SetPath("/test-success")
+
+		// Get initial metric values
+		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-success", "GET", "OK"))
+		initialDuration := testutil.ToFloat64(metrics.APIRequestDuration.WithLabelValues("/test-success", "GET"))
 
 		// Create middleware handler
 		handler := MetricsMiddleware()(func(c echo.Context) error {
@@ -131,14 +133,25 @@ func TestMetricsMiddleware(t *testing.T) {
 		err := handler(c)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, rec.Code)
+
+		// Verify metrics were incremented
+		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-success", "GET", "OK"))
+		assert.Equal(t, initialCount+1, finalCount, "request counter should increment by 1")
+
+		// Verify duration histogram was updated (count increases)
+		finalDuration := testutil.ToFloat64(metrics.APIRequestDuration.WithLabelValues("/test-success", "GET"))
+		assert.Greater(t, finalDuration, initialDuration, "duration histogram should be updated")
 	})
 
 	t.Run("records metrics for failed request", func(t *testing.T) {
 		e := echo.New()
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test-error", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetPath("/test")
+		c.SetPath("/test-error")
+
+		// Get initial metric values for Bad Request status
+		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-error", "GET", "Bad Request"))
 
 		// Create middleware handler that returns error
 		handler := MetricsMiddleware()(func(c echo.Context) error {
@@ -152,6 +165,10 @@ func TestMetricsMiddleware(t *testing.T) {
 		he, ok := err.(*echo.HTTPError)
 		assert.True(t, ok, "error should be HTTPError")
 		assert.Equal(t, http.StatusBadRequest, he.Code)
+
+		// Verify metrics were recorded for error status
+		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-error", "GET", "Bad Request"))
+		assert.Equal(t, initialCount+1, finalCount, "error counter should increment by 1")
 	})
 
 	t.Run("records metrics with different HTTP methods", func(t *testing.T) {
@@ -159,10 +176,13 @@ func TestMetricsMiddleware(t *testing.T) {
 
 		for _, method := range methods {
 			e := echo.New()
-			req := httptest.NewRequest(method, "/test", nil)
+			req := httptest.NewRequest(method, "/test-methods", nil)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetPath("/test")
+			c.SetPath("/test-methods")
+
+			// Get initial count for this method
+			initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-methods", method, "OK"))
 
 			handler := MetricsMiddleware()(func(c echo.Context) error {
 				return c.String(http.StatusOK, "success")
@@ -170,24 +190,56 @@ func TestMetricsMiddleware(t *testing.T) {
 
 			err := handler(c)
 			assert.NoError(t, err, "method %s should succeed", method)
+
+			// Verify metric was recorded for this method
+			finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-methods", method, "OK"))
+			assert.Equal(t, initialCount+1, finalCount, "counter for method %s should increment", method)
 		}
 	})
 
-	t.Run("records duration for slow requests", func(t *testing.T) {
+	t.Run("records duration histogram observations", func(t *testing.T) {
 		e := echo.New()
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test-duration", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetPath("/test")
+		c.SetPath("/test-duration")
 
-		// Create middleware handler with artificial delay
+		// Get initial histogram count (sum of observations)
+		initialDuration := testutil.ToFloat64(metrics.APIRequestDuration.WithLabelValues("/test-duration", "GET"))
+
 		handler := MetricsMiddleware()(func(c echo.Context) error {
-			// Artificial delay would go here in a real test
 			return c.String(http.StatusOK, "success")
 		})
 
 		err := handler(c)
 		assert.NoError(t, err)
+
+		// Verify histogram was updated
+		finalDuration := testutil.ToFloat64(metrics.APIRequestDuration.WithLabelValues("/test-duration", "GET"))
+		assert.Greater(t, finalDuration, initialDuration, "duration histogram should record observation")
+	})
+
+	t.Run("records correct status for internal server error", func(t *testing.T) {
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/test-500", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/test-500")
+
+		// Get initial metric values for Internal Server Error
+		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-500", "POST", "Internal Server Error"))
+
+		// Create middleware handler that returns non-HTTPError error
+		handler := MetricsMiddleware()(func(c echo.Context) error {
+			return assert.AnError // Regular error, not HTTPError
+		})
+
+		err := handler(c)
+		assert.Error(t, err)
+
+		// Verify metrics recorded 500 status for non-HTTPError
+		finalCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-500", "POST", "Internal Server Error"))
+		assert.Equal(t, initialCount+1, finalCount, "should record Internal Server Error for non-HTTPError")
 	})
 }
 
