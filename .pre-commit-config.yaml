@@ -48,6 +48,7 @@ repos:
       - id: check-yaml
         name: Check YAML Files
         args: [--allow-multiple-documents]
+        exclude: '^charts/.*\.yaml$'
 
       - id: check-json
         name: Check JSON Files
