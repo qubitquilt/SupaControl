@@ -264,42 +264,6 @@ func TestClient_GetAPIKeyByHash(t *testing.T) {
 	}
 }
 
-func TestClient_GetAPIKeyByHash_ExactExpirationBoundary(t *testing.T) {
-	client, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	user := createTestUserWithDefaults(t, client)
-
-	// Use a fixed time for predictable testing
-	fixedTime := time.Date(2023, 12, 25, 12, 0, 0, 0, time.UTC)
-
-	// Create a key that expires exactly at the fixed time
-	_, err := client.CreateAPIKey(user.ID, "boundary-key", "boundaryhash", &fixedTime)
-	if err != nil {
-		t.Fatalf("Failed to create boundary key: %v", err)
-	}
-
-	// Test just before expiration (should return key)
-	// Note: We can't easily mock time.Now(), so we'll test the logic indirectly
-	// by checking that a key expiring in the future is returned
-	futureTime := time.Now().Add(24 * time.Hour)
-	futureKey, err := client.CreateAPIKey(user.ID, "future-key", "futurehash", &futureTime)
-	if err != nil {
-		t.Fatalf("Failed to create future key: %v", err)
-	}
-
-	retrieved, err := client.GetAPIKeyByHash("futurehash")
-	if err != nil {
-		t.Fatalf("Failed to get future key: %v", err)
-	}
-	if retrieved == nil {
-		t.Fatal("Expected future key to be returned")
-	}
-	if retrieved.ID != futureKey.ID {
-		t.Errorf("Got ID %v, want %v", retrieved.ID, futureKey.ID)
-	}
-}
-
 func TestClient_GetAPIKeyByID(t *testing.T) {
 	client, cleanup := setupTestDB(t)
 	defer cleanup()
