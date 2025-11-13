@@ -1,3 +1,4 @@
+// Package k8s provides Kubernetes client functionality for SupaControl.
 package k8s
 
 import (

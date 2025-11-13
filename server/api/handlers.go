@@ -1,3 +1,4 @@
+// Package api provides HTTP handlers for the SupaControl API.
 package api
 
 import (

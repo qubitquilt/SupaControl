@@ -53,7 +53,7 @@ func TestStartInstance(t *testing.T) {
 			name:         "instance not found",
 			instanceName: "nonexistent",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
 				}
 			},
@@ -64,7 +64,7 @@ func TestStartInstance(t *testing.T) {
 			name:         "instance already running",
 			instanceName: "running-instance",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -129,7 +129,7 @@ func TestStopInstance(t *testing.T) {
 			name:         "successful stop",
 			instanceName: "test-instance",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -140,7 +140,7 @@ func TestStopInstance(t *testing.T) {
 						},
 					}, nil
 				}
-				cr.updateSupabaseInstanceFunc = func(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+				cr.updateSupabaseInstanceFunc = func(_ context.Context, _ *supacontrolv1alpha1.SupabaseInstance) error {
 					return nil
 				}
 			},
@@ -151,7 +151,7 @@ func TestStopInstance(t *testing.T) {
 			name:         "instance not found",
 			instanceName: "nonexistent",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
 				}
 			},
@@ -162,7 +162,7 @@ func TestStopInstance(t *testing.T) {
 			name:         "instance already stopped",
 			instanceName: "stopped-instance",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -331,7 +331,7 @@ func TestRestartInstance(t *testing.T) {
 			name:         "successful restart",
 			instanceName: "test-instance",
 			setupMock: func(cr *mockCRClient, k8s *fake.Clientset) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -430,7 +430,7 @@ func TestGetLogs(t *testing.T) {
 			name:         "successful log retrieval",
 			instanceName: "test-instance",
 			setupMock: func(cr *mockCRClient, k8s *fake.Clientset) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,

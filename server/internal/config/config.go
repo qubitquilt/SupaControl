@@ -135,6 +135,7 @@ func loadEnvFile(filename string) error {
 		if closeErr := file.Close(); closeErr != nil {
 			// Log the error but don't return it since we're in a deferred function
 			// In a real implementation, you might want to use proper logging
+			_ = closeErr
 		}
 	}()
 
@@ -160,6 +161,7 @@ func loadEnvFile(filename string) error {
 			if setErr := os.Setenv(key, value); setErr != nil {
 				// Log the error but continue processing other variables
 				// In a real implementation, you might want to use proper logging
+				_ = setErr
 			}
 		}
 	}

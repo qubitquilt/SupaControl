@@ -1,3 +1,4 @@
+// Package main provides the entry point and main application logic for the SupaControl server.
 package main
 
 import (

@@ -346,7 +346,7 @@ func (r *SupabaseInstanceReconciler) transitionToRunning(ctx context.Context, in
 }
 
 // reconcileRunning handles the running phase (health checks, drift detection)
-func (r *SupabaseInstanceReconciler) reconcileRunning(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) (ctrl.Result, error) {
+func (r *SupabaseInstanceReconciler) reconcileRunning(_ context.Context, _ *supacontrolv1alpha1.SupabaseInstance) (ctrl.Result, error) {
 	// In a production operator, you would:
 	// 1. Check if namespace still exists
 	// 2. Check if Helm release is healthy
