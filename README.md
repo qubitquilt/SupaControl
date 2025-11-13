@@ -155,21 +155,21 @@ Student 2 → Instance: supa-student2 (isolated learning environment)
 │                    │  (PostgreSQL)      │               │
 │                    └────────────────────┘               │
 └─────────────────────────────────────────────────────────┘
-                              │
-                     ┌─────────▼──────────┐
-                     │  Kubernetes API    │
-                     └─────────┬──────────┘
                                │
-         ┌─────────────────────┼─────────────────────┐
-         │                     │                     │
-    ┌────▼────┐           ┌────▼────┐           ┌────▼────┐
-    │Instance1│           │Instance2│           │Instance3│
-    │Namespace│           │Namespace│           │Namespace│
-    │supa-app1│           │supa-app2│           │supa-app3│
-    │         │           │         │           │         │
-    │ Supabase│           │ Supabase│           │ Supabase│
-    │  Stack  │           │  Stack  │           │  Stack  │
-    └─────────┘           └─────────┘           └─────────┘
+                      ┌─────────▼──────────┐
+                      │  Kubernetes API    │
+                      └─────────┬──────────┘
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+     ┌────▼────┐           ┌────▼────┐           ┌────▼────┐
+     │Instance1│           │Instance2│           │Instance3│
+     │Namespace│           │Namespace│           │Namespace│
+     │supa-app1│           │supa-app2│           │supa-app3│
+     │         │           │         │           │         │
+     │ Supabase│           │ Supabase│           │ Supabase│
+     │  Stack  │           │  Stack  │           │  Stack  │
+     └─────────┘           └─────────┘           └─────────┘
 ```
 
 For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -181,18 +181,19 @@ SupaControl uses Kubernetes Custom Resource Definitions (CRDs) as the single sou
 ```
 ┌─────────────────┐
 │   SupabaseInstance CRD   │
-│     (State)              │
+│     (Desired State)      │
 └─────────┬───────────────┘
-          │
+          │ Watches
 ┌─────────▼──────────┐
 │   Controller       │
 │   (Reconciles)     │
 └─────────┬──────────┘
-          │
-┌─────────▼──────────┐    ┌─────────▼──────────┐
-│   Supabase Stack   │    │   PostgreSQL DB    │
-│   (Resources)      │    │   (Users/API Keys) │
-└────────────────────┘    └────────────────────┘
+          │ Creates/Manages
+          ▼
+┌──────────────────┐
+│  Supabase Stack  │
+│ (Actual State)   │
+└──────────────────┘
 ```
 
 See [ADR 001](docs/adr/001-crd-as-single-source-of-truth.md) for the rationale behind using CRDs.
