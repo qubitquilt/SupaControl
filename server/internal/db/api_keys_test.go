@@ -177,7 +177,7 @@ func TestClient_CreateAPIKey_ConstraintViolations(t *testing.T) {
 			keyName:   string(make([]byte, 10000)), // 10,000 chars
 			keyHash:   "longnamehash",
 			expiresAt: nil,
-			wantErr:   false, // VARCHAR(255) should truncate or error
+			wantErr:   true, // VARCHAR(255) should truncate or error
 		},
 		{
 			name:      "very long hash",
@@ -185,7 +185,7 @@ func TestClient_CreateAPIKey_ConstraintViolations(t *testing.T) {
 			keyName:   "long-hash-key",
 			keyHash:   string(make([]byte, 10000)), // 10,000 chars
 			expiresAt: nil,
-			wantErr:   false, // VARCHAR(255) should truncate or error
+			wantErr:   true, // VARCHAR(255) should truncate or error
 		},
 	}
 
