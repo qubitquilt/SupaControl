@@ -164,7 +164,6 @@ jobs:
       with:
         version: v2.6.1
         working-directory: server
-        args: --output-format=colored-line-number
 
   lint-frontend:
     name: Frontend Lint
