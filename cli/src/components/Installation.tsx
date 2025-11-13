@@ -108,7 +108,7 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
     const tmpDir = join(homedir(), '.supacontrol', 'repo');
     try {
       console.log('Attempting to clone SupaControl repository...');
-      
+
       // Add timeout to git clone and use shallow clone for speed
       const subprocess = execa('git', [
         'clone',
@@ -121,7 +121,7 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
         timeout: 30000, // 30 second timeout
         maxBuffer: 1024 * 1024, // 1MB buffer
       });
-      
+
       await subprocess;
       const chartPath = join(tmpDir, 'charts/supacontrol');
       console.log(`Cloned chart to: ${chartPath}`);
@@ -145,7 +145,7 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
 
       try {
         console.log('Starting SupaControl installation process...');
-        
+
         // Step 1: Init
         setCurrentStep('init');
         updateStep('init', 'running');
@@ -235,19 +235,19 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
         setCurrentStep('pods');
         updateStep('pods', 'running');
         console.log('Checking pod health...');
-        
+
         // Wait a bit more for pods to start
         await new Promise((resolve) => setTimeout(resolve, 3000));
-        
+
         const podStatus = await checkPodStatus(config.namespace, config.releaseName);
-        
+
         if (!podStatus.success) {
           let errorMessage = 'Pod health check failed. ';
-          
+
           if (podStatus.errors.length > 0) {
             errorMessage += `Issues found: ${podStatus.errors.join('; ')}. `;
           }
-          
+
           if (podStatus.pods.length === 0) {
             errorMessage += 'No pods found for the release.';
           } else {
@@ -256,13 +256,13 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
             ).join('; ');
             errorMessage += `Pod status: ${podInfo}`;
           }
-          
+
           errorMessage += '\n\nTroubleshooting suggestions:\n';
           errorMessage += '1. Check image availability: kubectl describe pod <pod-name> -n ' + config.namespace + '\n';
           errorMessage += '2. Check events: kubectl get events -n ' + config.namespace + ' --sort-by=\'.lastTimestamp\'\n';
           errorMessage += '3. Verify image pull policy and registry access\n';
           errorMessage += '4. Check cluster resources and network connectivity';
-          
+
           throw new Error(errorMessage);
         }
 
@@ -273,7 +273,7 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
         clearTimeout(installationTimeout);
         setCurrentStep('complete');
         setTimeout(() => onComplete(true), 1000);
-        
+
       } catch (error: any) {
         clearTimeout(installationTimeout);
         console.error('Installation failed:', error.message);

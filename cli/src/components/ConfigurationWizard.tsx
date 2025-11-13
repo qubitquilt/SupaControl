@@ -62,7 +62,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
     if (config.installDatabase) {
       return [];
     }
-    
+
     const requiredDbFields: Step[] = ['dbHost', 'dbUser', 'dbName', 'dbPassword'];
     return requiredDbFields.filter(field => !config[field as keyof typeof config]);
   };
@@ -97,12 +97,12 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
       ...config,
       jwtSecret: generateJWTSecret(),
     };
-    
+
     // Only generate new database password if installing a new database
     if (config.installDatabase) {
       newConfig.dbPassword = generateDatabasePassword();
     }
-    
+
     setConfig(newConfig);
     nextStep();
   };
@@ -114,7 +114,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
       setStep(missingFields[0] as Step);
       return;
     }
-    
+
     onComplete(config as Configuration);
   };
 
@@ -250,7 +250,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
               onSelect={(item) => {
                 const newInstallDatabase = item.value;
                 handleInput('installDatabase', newInstallDatabase);
-                
+
                 // If switching to external database, go to dbHost step
                 if (!newInstallDatabase) {
                   setStep('dbHost');
@@ -436,20 +436,20 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
               <Text bold color="green">Generated ✓</Text>
             </Text>
           </Box>
-          
+
           {/* Validation warnings */}
           {!config.installDatabase && (() => {
             const missingFields = getMissingDbFields(config);
-            
+
             if (missingFields.length === 0) return null;
-            
+
             const fieldDescriptions: Record<string, string> = {
               'dbHost': 'Database host address',
               'dbUser': 'Database username',
               'dbName': 'Database name',
               'dbPassword': 'Database password'
             };
-            
+
             return (
               <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="red" paddingX={2} paddingY={1}>
                 <Text bold color="red">
@@ -472,7 +472,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
               </Box>
             );
           })()}
-          
+
           <Box marginTop={1}>
             <Text>
               {!config.installDatabase && (() => {
