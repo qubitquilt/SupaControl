@@ -167,10 +167,10 @@ else
 fi
 
 # Check for debug prints
-DEBUG_COUNT=$(grep -r "fmt\.Print\|print\|log\.Print" server/ --include="*.go" | grep -c -v "_test.go" 2>/dev/null || echo "0")
+DEBUG_COUNT=$(grep -r --include='*.go' --exclude='*_test.go' "fmt\.Print\|print\|log\.Print" server/ | grep -c . || echo "0")
 if [ "$DEBUG_COUNT" -gt 0 ] 2>/dev/null; then
     print_warning "Found potential debug prints in server code (check before committing)"
-    echo "Search with: grep -r 'fmt\.Print\|print\|log\.Print' server/ | grep -v '_test.go'"
+    echo "Search with: grep -r --include='*.go' --exclude='*_test.go' 'fmt\.Print\|print\|log\.Print' server/"
 else
     print_status "No debug prints found"
 fi

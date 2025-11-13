@@ -30,15 +30,8 @@ repos:
         types: [go]
         files: \.go$
 
-      # Simple Go vet check
-      - id: go-vet-local
-        name: go vet
-        entry: bash
-        language: system
-        args: [-c, 'cd server && go vet ./...']
-        types: [go]
-        files: \.go$
-        stages: [pre-commit]
+      # Note: go vet is already run in the supacontrol-pre-commit hook
+      # No need for separate go-vet-local hook as it's redundant
 
   # System hooks that don't require additional setup
   - repo: https://github.com/pre-commit/pre-commit-hooks
