@@ -55,7 +55,7 @@ Note: Instance state stored in SupabaseInstance CRDs, not PostgreSQL (ADR-001)
 │   ├── /internal        # Core business logic
 │   │   ├── /auth        # JWT & password hashing (74.5% tested)
 │   │   ├── /config      # Environment configuration (55% tested)
-│   │   ├── /db          # Database layer (sqlx) - UNTESTED
+│   │   ├── /db          # Database layer (sqlx) - 0% coverage
 │   │   │   ├── db.go           # Connection & migrations
 │   │   │   └── api_keys.go     # API key CRUD
 │   │   └── /k8s         # K8s orchestration (2.9% tested)
@@ -87,9 +87,6 @@ Note: Instance state stored in SupabaseInstance CRDs, not PostgreSQL (ADR-001)
 │   │       ├── prerequisites.ts # K8s/Helm checks
 │   │       └── secrets.ts      # Secret generation
 │   └── cli.tsx          # CLI entry point
-│
-├── /pkg/                # Shared packages
-│   └── /api-types       # API request/response types
 │
 ├── /charts/             # Helm chart
 │   └── /supacontrol     # SupaControl deployment chart
@@ -135,7 +132,7 @@ Note: Instance state stored in SupabaseInstance CRDs, not PostgreSQL (ADR-001)
 
 **Purpose**: SupaControl operational data persistence (users, API keys)
 
-**IMPORTANT**: Per ADR-001, instance state is stored in Kubernetes CRDs, NOT PostgreSQL.
+**IMPORTANT**: Per ADR-001, instance state is stored in Kubernetes CRDs, NOT PostgreSQL. The `instances` table was removed by migration 003 (`server/internal/db/migrations/003_remove_instances_table.sql`) as it was never used; all instance operations use CRDs via `server/internal/k8s/crclient.go`. See ADR-001: `docs/adr/001-crd-as-single-source-of-truth.md`.
 
 **Files**:
 - `db.go` - Connection, migrations, health checks
@@ -210,7 +207,7 @@ id, name, key_hash, user_id, created_at, expires_at, last_used
 
 ### Adding a New API Endpoint
 
-1. **Define request/response types** in `pkg/api-types/`
+1. **Define request/response types** in `server/api/v1alpha1/supabaseinstance_types.go` if CRD-related
 2. **Add handler function** in `server/api/handlers.go`
 3. **Register route** in `server/api/router.go`
 4. **Add database operations** in `server/internal/db/` if needed
@@ -219,10 +216,10 @@ id, name, key_hash, user_id, created_at, expires_at, last_used
 
 Example:
 ```go
-// 1. Add handler
+// 1. Add handler using crClient for CRD operations
 func (h *Handler) GetInstanceLogs(c echo.Context) error {
     name := c.Param("name")
-    logs, err := h.k8s.GetLogs(c.Request().Context(), name)
+    logs, err := h.k8s.GetLogs(c.Request().Context(), name)  // Uses k8s client wrapper
     if err != nil {
         return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
     }
@@ -232,6 +229,8 @@ func (h *Handler) GetInstanceLogs(c echo.Context) error {
 // 2. Register route
 api.GET("/instances/:name/logs", handler.GetInstanceLogs)
 ```
+
+**Note**: For CRD operations, use `server/internal/k8s/crclient.go` (aligns with ADR-001). For job-based provisioning (ADR-002), reference `docs/adr/002-job-based-provisioning-pattern.md` when implementing long-running operations like Helm installs.
 
 ### Adding Database Migrations
 
@@ -413,7 +412,7 @@ try {
 
 1. **Update CRD spec**:
 ```go
-// api/v1/supabaseinstance_types.go
+// server/api/v1alpha1/supabaseinstance_types.go
 type SupabaseInstanceSpec struct {
     ProjectName string `json:"projectName"`
     Description string `json:"description,omitempty"`  // NEW
@@ -421,14 +420,7 @@ type SupabaseInstanceSpec struct {
 }
 ```
 
-2. **Update API types**:
-```go
-// pkg/api-types/instance.go
-type CreateInstanceRequest struct {
-    Name        string `json:"name"`
-    Description string `json:"description,omitempty"`  // NEW
-}
-```
+2. **Update API types** if needed for request/response
 
 3. **Update handler to pass description to CRD**:
 ```go
@@ -439,6 +431,9 @@ instance := &v1.SupabaseInstance{
         Description: req.Description,  // NEW
         // ... other fields
     },
+}
+if err := h.crClient.CreateSupabaseInstance(ctx, instance); err != nil {  // Use crClient
+    // handle error
 }
 ```
 
@@ -457,20 +452,14 @@ instance := &v1.SupabaseInstance{
 
 **Example**: Get instance logs
 
-1. **Add K8s function**:
-```go
-// server/internal/k8s/orchestrator.go
-func (o *Orchestrator) GetLogs(ctx context.Context, name string) (string, error) {
-    // Implementation
-}
-```
+1. **Add K8s function** if needed in `server/internal/k8s/k8s.go` or use existing
 
 2. **Add handler**:
 ```go
 // server/api/handlers.go
 func (h *Handler) GetInstanceLogs(c echo.Context) error {
     name := c.Param("name")
-    logs, err := h.k8s.GetLogs(c.Request().Context(), name)
+    logs, err := h.k8s.GetLogs(c.Request().Context(), name)  // Uses k8s client
     if err != nil {
         return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
     }
@@ -526,10 +515,10 @@ func TestListInstances(t *testing.T) {
 
 ## Testing Strategy
 
-### Current State (as of November 2024)
+### Current State (as of November 2025)
 
 **Coverage**:
-- Backend (Go): 6.3% overall
+- Backend (Go): ~6% overall
   - auth: 74.5% ✅
   - config: 55% ⚠️
   - k8s: 2.9% ❌
@@ -612,6 +601,7 @@ test('creates new instance on form submit', async () => {
 - Never modify existing migrations - create new ones
 - Use sequential numbering (001, 002, 003...)
 - Test migrations on fresh database before committing
+- Recent change: Migration 003 removed the unused `instances` table (per ADR-001)
 
 ### 2. Kubernetes Permissions
 
@@ -658,6 +648,13 @@ test('creates new instance on form submit', async () => {
 - Focus on critical paths: auth, instance CRUD, API handlers
 - Use `make test-coverage` to check coverage
 - Aim for 70%+ coverage on new code
+- Recent additions: Controller test suite in `server/controllers/suite_test.go`; Metrics module in `server/internal/metrics/`
+
+### 9. Recent Architectural Changes
+
+- **ADR-001**: CRDs as single source of truth - instance state managed via `server/internal/k8s/crclient.go`, no PostgreSQL table
+- **ADR-002**: Job-based provisioning pattern - long-running operations (Helm install/uninstall) delegated to Kubernetes Jobs for better reliability and observability (`docs/adr/002-job-based-provisioning-pattern.md`)
+- Use `crclient.go` for all CRD operations; `orchestrator.go` is legacy for direct Helm calls
 
 ## CI/CD Pipeline
 

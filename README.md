@@ -2,7 +2,7 @@
 
 [![GitHub Actions](https://img.shields.io/github/actions/workflow/status/qubitquilt/SupaControl/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/qubitquilt/SupaControl/actions)
 [![Codecov](https://img.shields.io/codecov/c/github/qubitquilt/SupaControl?style=for-the-badge&logo=codecov&logoColor=white)](https://codecov.io/gh/qubitquilt/SupaControl)
-[![Go Report Card](https://img.shields.io/badge/go%20report-A+-brightgreen?style=for-the-badge&logo=go&logoColor=white)](https://goreportcard.com/report/github.com/qubitquilt/supacontrol/server)
+[![Go Report Card](https://img.shields.io/badge/go%20report-C-red?style=for-the-badge&logo=go&logoColor=white)](https://goreportcard.com/report/github.com/qubitquilt/supacontrol/server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 ## Built With
@@ -89,7 +89,8 @@ curl -X POST https://supacontrol.example.com/api/v1/instances \
 - 🚀 **Automated Provisioning**: Deploy complete Supabase stacks with a single API call
 - 🔒 **Complete Isolation**: Each instance in its own dedicated Kubernetes namespace
 - 🔐 **Security First**: API key and JWT authentication, encrypted secrets management
-- 📊 **Persistent Inventory**: PostgreSQL-backed state tracking and audit logs
+- 📊 **Persistent Inventory**: PostgreSQL for users and API keys only; instance state managed via Kubernetes CRDs. See [ADR 001](docs/adr/001-crd-as-single-source-of-truth.md) for details.
+- ⏳ **Asynchronous Operations**: Instance creation and deletion are asynchronous; poll `GET /api/v1/instances/:name` for status updates.
 - 🌐 **Web Dashboard**: Modern React-based UI for instance management
 - 🔑 **API Key Management**: Generate, list, and revoke keys for CLI/programmatic access
 - 🎯 **Status Monitoring**: Real-time instance health and deployment status
@@ -154,28 +155,54 @@ Student 2 → Instance: supa-student2 (isolated learning environment)
 │                    │  (PostgreSQL)      │               │
 │                    └────────────────────┘               │
 └─────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────▼──────────┐
-                    │  Kubernetes API    │
-                    └─────────┬──────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-   ┌────▼────┐           ┌────▼────┐           ┌────▼────┐
-   │Instance1│           │Instance2│           │Instance3│
-   │Namespace│           │Namespace│           │Namespace│
-   │supa-app1│           │supa-app2│           │supa-app3│
-   │         │           │         │           │         │
-   │ Supabase│           │ Supabase│           │ Supabase│
-   │  Stack  │           │  Stack  │           │  Stack  │
-   └─────────┘           └─────────┘           └─────────┘
+                               │
+                      ┌─────────▼──────────┐
+                      │  Kubernetes API    │
+                      └─────────┬──────────┘
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+     ┌────▼────┐           ┌────▼────┐           ┌────▼────┐
+     │Instance1│           │Instance2│           │Instance3│
+     │Namespace│           │Namespace│           │Namespace│
+     │supa-app1│           │supa-app2│           │supa-app3│
+     │         │           │         │           │         │
+     │ Supabase│           │ Supabase│           │ Supabase│
+     │  Stack  │           │  Stack  │           │  Stack  │
+     └─────────┘           └─────────┘           └─────────┘
 ```
 
 For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
+### Instance State Management
+
+SupaControl uses Kubernetes Custom Resource Definitions (CRDs) as the single source of truth for instance state. The `SupabaseInstance` CRD tracks the desired and actual state of each Supabase deployment, enabling declarative management and reconciliation.
+
+```
+┌─────────────────┐
+│   SupabaseInstance CRD   │
+│     (Desired State)      │
+└─────────┬───────────────┘
+          │ Watches
+┌─────────▼──────────┐
+│   Controller       │
+│   (Reconciles)     │
+└─────────┬──────────┘
+          │ Creates/Manages
+          ▼
+┌──────────────────┐
+│  Supabase Stack  │
+│ (Actual State)   │
+└──────────────────┘
+```
+
+See [ADR 001](docs/adr/001-crd-as-single-source-of-truth.md) for the rationale behind using CRDs.
+
 ## Quick Start
 
 The fastest way to get started with SupaControl is using our interactive installer.
+
+Note: Currently requires git clone as no npx installer is available.
 
 ### Prerequisites Checklist
 
@@ -328,6 +355,8 @@ kubectl get pods -n supacontrol --watch
 
 For local development without Kubernetes:
 
+Before running, ensure `KUBECONFIG` is set for local Kubernetes development. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup instructions and troubleshooting.
+
 ```bash
 # 1. Start PostgreSQL
 docker run --name supacontrol-postgres \
@@ -378,6 +407,10 @@ curl -X POST https://supacontrol.example.com/api/v1/instances \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"my-app"}'
+
+# Note: Instance creation is asynchronous. Poll for status:
+curl -X GET https://supacontrol.example.com/api/v1/instances/my-app \
+  -H "Authorization: Bearer $TOKEN"
 
 # 3. List instances
 curl -X GET https://supacontrol.example.com/api/v1/instances \
@@ -430,7 +463,7 @@ Comprehensive documentation is available in the `/docs` directory:
 
 ## CLI Tool
 
-For command-line management, use **[supactl](https://github.com/qubitquilt/supactl)** - our official CLI tool.
+The project's `cli/` directory contains the interactive installer for SupaControl. For the full supactl CLI tool, see [https://github.com/qubitquilt/supactl](https://github.com/qubitquilt/supactl). Features like local mode are available in the external repository.
 
 ### Installation
 
@@ -525,7 +558,7 @@ We welcome contributions! Whether you're fixing bugs, improving documentation, o
 
 ### Ways to Contribute
 
-- 🧪 **Testing** - Improve test coverage (currently ~6%)
+- 🧪 **Testing** - Improve test coverage (currently ~6%). See [TESTING.md](TESTING.md) for details.
 - 📝 **Documentation** - Tutorials, guides, examples
 - 🐛 **Bug Fixes** - Fix reported issues
 - ✨ **Features** - Implement roadmap items
