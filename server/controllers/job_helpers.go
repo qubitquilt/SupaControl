@@ -1,3 +1,4 @@
+// Package controllers provides Kubernetes job management functionality for SupaControl.
 package controllers
 
 import (
@@ -8,7 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -76,9 +77,9 @@ func (r *SupabaseInstanceReconciler) createProvisioningJob(ctx context.Context, 
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(instance, supacontrolv1alpha1.GroupVersion.WithKind("SupabaseInstance"))},
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit:            pointer.Int32(3),    // Retry up to 3 times
-			ActiveDeadlineSeconds:   pointer.Int64(900),  // 15 minute timeout
-			TTLSecondsAfterFinished: pointer.Int32(3600), // Clean up after 1 hour
+			BackoffLimit:            ptr.To(int32(3)),    // Retry up to 3 times
+			ActiveDeadlineSeconds:   ptr.To(int64(900)),  // 15 minute timeout
+			TTLSecondsAfterFinished: ptr.To(int32(3600)), // Clean up after 1 hour
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -252,9 +253,9 @@ func (r *SupabaseInstanceReconciler) createCleanupJob(ctx context.Context, insta
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(instance, supacontrolv1alpha1.GroupVersion.WithKind("SupabaseInstance"))},
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit:            pointer.Int32(2),    // Retry up to 2 times
-			ActiveDeadlineSeconds:   pointer.Int64(600),  // 10 minute timeout
-			TTLSecondsAfterFinished: pointer.Int32(3600), // Clean up after 1 hour
+			BackoffLimit:            ptr.To(int32(2)),    // Retry up to 2 times
+			ActiveDeadlineSeconds:   ptr.To(int64(600)),  // 10 minute timeout
+			TTLSecondsAfterFinished: ptr.To(int32(3600)), // Clean up after 1 hour
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{

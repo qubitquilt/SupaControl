@@ -1,0 +1,93 @@
+# Pre-commit configuration for SupaControl
+# This file enables automatic pre-commit hooks that run linting and basic checks
+#
+# To install pre-commit hooks, run:
+#   pip install pre-commit
+#   pre-commit install
+#
+# To run manually:
+#   pre-commit run --all-files
+
+repos:
+  # Local hooks
+  - repo: local
+    hooks:
+      # Run our comprehensive pre-commit script
+      - id: supacontrol-pre-commit
+        name: SupaControl Pre-commit Checks
+        entry: ./scripts/pre-commit.sh
+        language: system
+        stages: [pre-commit, pre-push]
+        pass_filenames: false
+        always_run: true
+
+      # Go formatting check
+      - id: gofmt
+        name: gofmt
+        entry: gofmt
+        language: system
+        args: [-l]
+        types: [go]
+        files: \.go$
+
+      # Note: go vet is already run in the supacontrol-pre-commit hook
+      # No need for separate go-vet-local hook as it's redundant
+
+  # System hooks that don't require additional setup
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Basic file checks
+      - id: trailing-whitespace
+        name: Trim Trailing Whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      - id: end-of-file-fixer
+        name: Fix End of Files
+
+      - id: check-yaml
+        name: Check YAML Files
+        args: [--allow-multiple-documents]
+
+      - id: check-json
+        name: Check JSON Files
+
+      - id: check-merge-conflict
+        name: Check for Merge Conflicts
+
+      - id: check-added-large-files
+        name: Check for Large Files
+        args: ['--maxkb=1000']
+        exclude: '^ui/node_modules/.*$'
+
+      # Check for common issues
+      - id: detect-private-key
+        name: Detect Private Keys
+
+      - id: check-executables-have-shebangs
+        name: Check Executables Have Shebangs
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        name: ShellCheck
+        types: [shell]
+
+# Configuration for pre-commit
+default_stages: [pre-commit]
+minimum_pre_commit_version: '3.0.0'
+
+# CI configuration - when running in CI, we want to run all hooks
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

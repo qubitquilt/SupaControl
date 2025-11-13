@@ -1,11 +1,12 @@
+// Package db provides database operations for SupaControl.
+// This file contains test helper utilities for database testing.
 package db
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // PostgreSQL driver for database tests
 )
 
 // setupTestDB creates a test database client and runs migrations
@@ -27,16 +28,20 @@ func setupTestDB(t *testing.T) (*Client, func()) {
 
 	// Ping to verify connection
 	if err := client.Ping(); err != nil {
-		client.Close()
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("Failed to close client after ping failure: %v", closeErr)
+		}
 		t.Fatalf("Failed to ping test database: %v", err)
 	}
 
 	// Get migrations path (relative to this file)
-	migrationsPath := filepath.Join("migrations")
+	migrationsPath := "migrations"
 
 	// Run migrations
 	if err := client.RunMigrations(migrationsPath); err != nil {
-		client.Close()
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("Failed to close client after migration failure: %v", closeErr)
+		}
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 

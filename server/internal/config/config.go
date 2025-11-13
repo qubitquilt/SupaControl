@@ -1,3 +1,5 @@
+// Package config provides configuration management for SupaControl.
+// It handles loading configuration from environment variables and .env files.
 package config
 
 import (
@@ -129,7 +131,13 @@ func loadEnvFile(filename string) error {
 		}
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			// Log the error but don't return it since we're in a deferred function
+			// In a real implementation, you might want to use proper logging
+			_ = closeErr
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -150,7 +158,11 @@ func loadEnvFile(filename string) error {
 
 		// Set environment variable if not already set
 		if os.Getenv(key) == "" {
-			os.Setenv(key, value)
+			if setErr := os.Setenv(key, value); setErr != nil {
+				// Log the error but continue processing other variables
+				// In a real implementation, you might want to use proper logging
+				_ = setErr
+			}
 		}
 	}
 

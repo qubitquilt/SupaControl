@@ -154,7 +154,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-error", "GET", "400"))
 
 		// Create middleware handler that returns error
-		handler := MetricsMiddleware()(func(c echo.Context) error {
+		handler := MetricsMiddleware()(func(_ echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest, "bad request")
 		})
 
@@ -226,7 +226,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		initialCount := testutil.ToFloat64(metrics.APIRequestsTotal.WithLabelValues("/test-500", "POST", "500"))
 
 		// Create middleware handler that returns non-HTTPError error
-		handler := MetricsMiddleware()(func(c echo.Context) error {
+		handler := MetricsMiddleware()(func(_ echo.Context) error {
 			return assert.AnError // Regular error, not HTTPError
 		})
 
