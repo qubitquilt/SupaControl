@@ -1,6 +1,8 @@
-# SupaControl Installer
+# SupaControl Interactive Installer
 
-An interactive CLI installer for SupaControl, built with [Ink](https://github.com/vadimdemedes/ink).
+This README covers the interactive installer in the `cli/` directory, which deploys the SupaControl server to your Kubernetes cluster. It provides a step-by-step wizard for initial setup.
+
+For command-line management of Supabase instances (e.g., login, create, list, status, delete), use the external full supactl CLI tool available at [https://github.com/qubitquilt/supactl](https://github.com/qubitquilt/supactl).
 
 ## Features
 
@@ -121,7 +123,39 @@ The installer creates:
    - Services and ingresses
    - RBAC configuration
 
-## Post-Installation
+## Full supactl CLI
+
+The interactive installer deploys the SupaControl server. For ongoing management of Supabase instances, install the full supactl CLI tool from the external repository: [https://github.com/qubitquilt/supactl](https://github.com/qubitquilt/supactl).
+
+### Installation
+
+```bash
+# Linux/macOS
+curl -sSL https://raw.githubusercontent.com/qubitquilt/supactl/main/scripts/install.sh | bash
+
+# Or download from releases
+# https://github.com/qubitquilt/supactl/releases
+```
+
+### Key Commands
+
+- `supactl login <url>` - Authenticate with your SupaControl server
+- `supactl create <name>` - Create a new Supabase instance
+- `supactl list` - List all instances
+- `supactl status <name>` - Check instance status
+- `supactl delete <name>` - Delete an instance
+
+### Features
+
+- 🚀 **Single binary** - No dependencies, works everywhere
+- 🔐 **Secure auth** - Credential management built-in
+- 📂 **Directory linking** - Associate local dirs with instances
+- 🎨 **Interactive UI** - Beautiful prompts and progress indicators
+- 🐳 **Local mode** - Manage Docker-based instances without a server
+
+Full documentation is available in the external repository.
+
+## Post-Installation Usage
 
 After successful installation:
 
@@ -139,9 +173,25 @@ After successful installation:
    - Go to Settings in the dashboard
    - Create an API key for CLI access
 
-4. **Create First Instance**:
-   - Use the dashboard or API
-   - Deploy your first Supabase instance
+4. **Install and Use Full CLI**:
+   ```bash
+   # Install supactl
+   curl -sSL https://raw.githubusercontent.com/qubitquilt/supactl/main/scripts/install.sh | bash
+
+   # Login to SupaControl
+   supactl login https://supacontrol.yourdomain.com
+
+   # Create your first Supabase instance
+   supactl create my-first-app
+
+   # Check instance status
+   supactl status my-first-app
+
+   # List all instances
+   supactl list
+   ```
+
+The installer deploys the server, enabling use of the full CLI for instance management.
 
 ## Troubleshooting
 
@@ -175,6 +225,16 @@ kubectl config use-context <your-context>
 kubectl get nodes
 ```
 
+### Helm Repo Addition Required
+
+**Problem**: Supabase Helm chart not found during installation
+
+**Solution**:
+```bash
+helm repo add supabase-community https://supabase-community.github.io/supabase-kubernetes
+helm repo update
+```
+
 ### Installation Fails
 
 **Problem**: Helm installation errors
@@ -189,6 +249,22 @@ kubectl get nodes
    kubectl delete namespace supacontrol
    # Run installer again
    ```
+
+### Secret Generation Errors
+
+**Problem**: Issues generating JWT secrets or passwords
+
+**Solution**:
+- Ensure Node.js version is compatible (v18+)
+- Check for write permissions in `~/.supacontrol/`
+- Manually generate secrets if needed:
+  ```bash
+  # Generate JWT secret (64 bytes)
+  openssl rand -base64 48
+
+  # Generate DB password (32 chars)
+  openssl rand -base64 24 | tr -d "=+/" | cut -c1-32
+  ```
 
 ### Dashboard Not Accessible
 
@@ -235,6 +311,15 @@ kubectl get nodes
 └── README.md
 ```
 
+### Local Development
+
+```bash
+# Development mode (with hot reload)
+npm run dev
+```
+
+This runs the installer in development mode for testing changes interactively.
+
 ### Building
 
 ```bash
@@ -244,16 +329,21 @@ npm run build
 # Output: dist/cli.js
 ```
 
-### Testing Locally
+The build creates a single executable bundle for the installer.
+
+### Testing
 
 ```bash
-# Development mode (with hot reload)
-npm run dev
-
-# Test build
-npm run build
-node dist/cli.js
+# Run all tests
+npm test
 ```
+
+Tests cover:
+- Components (e.g., Welcome.test.tsx, PrerequisitesCheck.test.tsx)
+- Utilities (e.g., helm.test.ts, prerequisites.test.ts, secrets.test.ts)
+- End-to-end installation flow
+
+Use Vitest for fast, reliable testing with TypeScript support.
 
 ## Technologies
 
@@ -273,5 +363,4 @@ Contributions welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md).
 MIT - See [LICENSE](../LICENSE) file.
 
 ---
-
 **SupaControl Installer** - Interactive installation made easy.
