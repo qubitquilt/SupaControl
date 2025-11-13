@@ -217,10 +217,19 @@ func TestClient_CreateUser(t *testing.T) {
 
 	// Test database error during CreateUser
 	t.Run("database error during CreateUser", func(t *testing.T) {
-		// Close the connection to simulate DB failure
-		_ = client.Close()
+		// Create a separate client for error simulation
+		testDSN := os.Getenv("TEST_DATABASE_URL")
+		if testDSN == "" {
+			t.Skip("TEST_DATABASE_URL not set")
+		}
+		errorClient, err := NewClient(testDSN)
+		if err != nil {
+			t.Fatalf("Failed to create error client: %v", err)
+		}
+		// Close it immediately to simulate failure
+		_ = errorClient.Close()
 
-		_, err := client.CreateUser("failuser", "failhash", "admin")
+		_, err = errorClient.CreateUser("failuser", "failhash", "admin")
 		if err == nil {
 			t.Error("Expected error when database connection is closed")
 		}
@@ -286,10 +295,19 @@ func TestClient_GetUserByUsername(t *testing.T) {
 
 	// Test database error during GetUserByUsername
 	t.Run("database error during GetUserByUsername", func(t *testing.T) {
-		// Close the connection to simulate DB failure
-		_ = client.Close()
+		// Create a separate client for error simulation
+		testDSN := os.Getenv("TEST_DATABASE_URL")
+		if testDSN == "" {
+			t.Skip("TEST_DATABASE_URL not set")
+		}
+		errorClient, err := NewClient(testDSN)
+		if err != nil {
+			t.Fatalf("Failed to create error client: %v", err)
+		}
+		// Close it immediately to simulate failure
+		_ = errorClient.Close()
 
-		_, err := client.GetUserByUsername("testuser")
+		_, err = errorClient.GetUserByUsername("testuser")
 		if err == nil {
 			t.Error("Expected error when database connection is closed")
 		}
@@ -361,10 +379,19 @@ func TestClient_GetUserByID(t *testing.T) {
 
 	// Test database error during GetUserByID
 	t.Run("database error during GetUserByID", func(t *testing.T) {
-		// Close the connection to simulate DB failure
-		_ = client.Close()
+		// Create a separate client for error simulation
+		testDSN := os.Getenv("TEST_DATABASE_URL")
+		if testDSN == "" {
+			t.Skip("TEST_DATABASE_URL not set")
+		}
+		errorClient, err := NewClient(testDSN)
+		if err != nil {
+			t.Fatalf("Failed to create error client: %v", err)
+		}
+		// Close it immediately to simulate failure
+		_ = errorClient.Close()
 
-		_, err := client.GetUserByID(created.ID)
+		_, err = errorClient.GetUserByID(created.ID)
 		if err == nil {
 			t.Error("Expected error when database connection is closed")
 		}
@@ -500,13 +527,25 @@ func TestClient_WithinTransaction_Panic(t *testing.T) {
 }
 
 func TestClient_WithinTransaction_CommitError(t *testing.T) {
-	client, cleanup := setupTestDB(t)
-	defer cleanup()
+	// Create a separate client for this test to avoid interfering with shared connections
+	testDSN := os.Getenv("TEST_DATABASE_URL")
+	if testDSN == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	client, err := NewClient(testDSN)
+	if err != nil {
+		t.Fatalf("Failed to create test client: %v", err)
+	}
+	defer func() {
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("Failed to close test client: %v", closeErr)
+		}
+	}()
 
 	// Test commit failure by closing the database connection during transaction
 	// This simulates a connection loss that would cause commit to fail
 	var commitError error
-	err := client.WithinTransaction(func(tx *sqlx.Tx) error {
+	err = client.WithinTransaction(func(tx *sqlx.Tx) error {
 		// Perform some operation
 		_, err := tx.Exec("SELECT 1")
 		if err != nil {
@@ -563,11 +602,23 @@ func TestClient_BeginTx(t *testing.T) {
 }
 
 func TestClient_BeginTx_AfterClose(t *testing.T) {
-	client, cleanup := setupTestDB(t)
-	defer cleanup()
+	// Create a separate client for this test
+	testDSN := os.Getenv("TEST_DATABASE_URL")
+	if testDSN == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	client, err := NewClient(testDSN)
+	if err != nil {
+		t.Fatalf("Failed to create test client: %v", err)
+	}
+	defer func() {
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("Failed to close test client: %v", closeErr)
+		}
+	}()
 
 	// Close the client
-	err := client.Close()
+	err = client.Close()
 	if err != nil {
 		t.Fatalf("Failed to close client: %v", err)
 	}
