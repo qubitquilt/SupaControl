@@ -66,14 +66,22 @@ func TestLoadConfig(t *testing.T) {
 	// Restore env vars after test
 	defer func() {
 		if origDBPassword != "" {
-			os.Setenv("DB_PASSWORD", origDBPassword)
+			if err := os.Setenv("DB_PASSWORD", origDBPassword); err != nil {
+				t.Errorf("Failed to restore DB_PASSWORD: %v", err)
+			}
 		} else {
-			os.Unsetenv("DB_PASSWORD")
+			if err := os.Unsetenv("DB_PASSWORD"); err != nil {
+				t.Errorf("Failed to unset DB_PASSWORD: %v", err)
+			}
 		}
 		if origJWTSecret != "" {
-			os.Setenv("JWT_SECRET", origJWTSecret)
+			if err := os.Setenv("JWT_SECRET", origJWTSecret); err != nil {
+				t.Errorf("Failed to restore JWT_SECRET: %v", err)
+			}
 		} else {
-			os.Unsetenv("JWT_SECRET")
+			if err := os.Unsetenv("JWT_SECRET"); err != nil {
+				t.Errorf("Failed to unset JWT_SECRET: %v", err)
+			}
 		}
 	}()
 
@@ -106,15 +114,23 @@ func TestLoadConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.dbPassword != "" {
-				os.Setenv("DB_PASSWORD", tt.dbPassword)
+				if err := os.Setenv("DB_PASSWORD", tt.dbPassword); err != nil {
+					t.Fatalf("Failed to set DB_PASSWORD: %v", err)
+				}
 			} else {
-				os.Unsetenv("DB_PASSWORD")
+				if err := os.Unsetenv("DB_PASSWORD"); err != nil {
+					t.Fatalf("Failed to unset DB_PASSWORD: %v", err)
+				}
 			}
 
 			if tt.jwtSecret != "" {
-				os.Setenv("JWT_SECRET", tt.jwtSecret)
+				if err := os.Setenv("JWT_SECRET", tt.jwtSecret); err != nil {
+					t.Fatalf("Failed to set JWT_SECRET: %v", err)
+				}
 			} else {
-				os.Unsetenv("JWT_SECRET")
+				if err := os.Unsetenv("JWT_SECRET"); err != nil {
+					t.Fatalf("Failed to unset JWT_SECRET: %v", err)
+				}
 			}
 
 			cfg, err := Load()
@@ -137,11 +153,19 @@ func TestLoadConfig(t *testing.T) {
 
 func TestLoadConfigDefaults(t *testing.T) {
 	// Set required env vars
-	os.Setenv("DB_PASSWORD", "testpass")
-	os.Setenv("JWT_SECRET", "testsecret")
+	if err := os.Setenv("DB_PASSWORD", "testpass"); err != nil {
+		t.Fatalf("Failed to set DB_PASSWORD: %v", err)
+	}
+	if err := os.Setenv("JWT_SECRET", "testsecret"); err != nil {
+		t.Fatalf("Failed to set JWT_SECRET: %v", err)
+	}
 	defer func() {
-		os.Unsetenv("DB_PASSWORD")
-		os.Unsetenv("JWT_SECRET")
+		if err := os.Unsetenv("DB_PASSWORD"); err != nil {
+			t.Errorf("Failed to unset DB_PASSWORD: %v", err)
+		}
+		if err := os.Unsetenv("JWT_SECRET"); err != nil {
+			t.Errorf("Failed to unset JWT_SECRET: %v", err)
+		}
 	}()
 
 	cfg, err := Load()

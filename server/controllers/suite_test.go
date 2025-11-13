@@ -298,9 +298,9 @@ func TestCreateBasicInstance_NameLengthCompliance(t *testing.T) {
 		provisionJobName := fmt.Sprintf("supacontrol-provision-%s", instance.Spec.ProjectName)
 		cleanupJobName := fmt.Sprintf("supacontrol-cleanup-%s", instance.Spec.ProjectName)
 
-		maxNameLength = max(maxNameLength, len(instance.Spec.ProjectName))
-		maxJobNameLength = max(maxJobNameLength, len(provisionJobName))
-		maxJobNameLength = max(maxJobNameLength, len(cleanupJobName))
+		maxNameLength = maxInt(maxNameLength, len(instance.Spec.ProjectName))
+		maxJobNameLength = maxInt(maxJobNameLength, len(provisionJobName))
+		maxJobNameLength = maxInt(maxJobNameLength, len(cleanupJobName))
 
 		t.Logf("Test: %s", testName)
 		t.Logf("  Project Name: %s (%d chars)", instance.Spec.ProjectName, len(instance.Spec.ProjectName))
@@ -366,7 +366,7 @@ func isValidK8sName(name string) bool {
 	// Kubernetes resource names must start and end with alphanumeric
 	// and can contain hyphens in between
 	for i, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || (c == '-' && i > 0 && i < len(name)-1)) {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && (c != '-' || i <= 0 || i >= len(name)-1) {
 			return false
 		}
 	}
@@ -374,7 +374,7 @@ func isValidK8sName(name string) bool {
 	return true
 }
 
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

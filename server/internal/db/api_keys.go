@@ -1,3 +1,5 @@
+// Package db provides database operations for SupaControl.
+// This file specifically handles API key management operations.
 package db
 
 import (

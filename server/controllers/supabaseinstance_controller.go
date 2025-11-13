@@ -85,7 +85,7 @@ func (r *SupabaseInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Handle deletion with finalizer
-	if !instance.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !instance.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, instance)
 	}
 

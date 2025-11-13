@@ -55,7 +55,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer dbClient.Close()
+	defer func() {
+		if closeErr := dbClient.Close(); closeErr != nil {
+			log.Printf("Error closing database client: %v", closeErr)
+		}
+	}()
 
 	log.Println("Connected to database")
 
