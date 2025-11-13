@@ -31,18 +31,18 @@ func TestStartInstance(t *testing.T) {
 			name:         "successful start",
 			instanceName: "test-instance",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
-							Name: name,
+							Name: "test-instance",
 						},
 						Spec: supacontrolv1alpha1.SupabaseInstanceSpec{
-							ProjectName: name,
+							ProjectName: "test-instance",
 							Paused:      true, // Instance is stopped
 						},
 					}, nil
 				}
-				cr.updateSupabaseInstanceFunc = func(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+				cr.updateSupabaseInstanceFunc = func(_ context.Context, _ *supacontrolv1alpha1.SupabaseInstance) error {
 					return nil
 				}
 			},
@@ -53,7 +53,7 @@ func TestStartInstance(t *testing.T) {
 			name:         "instance not found",
 			instanceName: "nonexistent",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
 				}
 			},
@@ -64,7 +64,7 @@ func TestStartInstance(t *testing.T) {
 			name:         "instance already running",
 			instanceName: "running-instance",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -129,7 +129,7 @@ func TestStopInstance(t *testing.T) {
 			name:         "successful stop",
 			instanceName: "test-instance",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -140,7 +140,7 @@ func TestStopInstance(t *testing.T) {
 						},
 					}, nil
 				}
-				cr.updateSupabaseInstanceFunc = func(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+				cr.updateSupabaseInstanceFunc = func(_ context.Context, _ *supacontrolv1alpha1.SupabaseInstance) error {
 					return nil
 				}
 			},
@@ -151,7 +151,7 @@ func TestStopInstance(t *testing.T) {
 			name:         "instance not found",
 			instanceName: "nonexistent",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
 				}
 			},
@@ -162,7 +162,7 @@ func TestStopInstance(t *testing.T) {
 			name:         "instance already stopped",
 			instanceName: "stopped-instance",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -331,7 +331,7 @@ func TestRestartInstance(t *testing.T) {
 			name:         "successful restart",
 			instanceName: "test-instance",
 			setupMock: func(cr *mockCRClient, k8s *fake.Clientset) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -358,7 +358,9 @@ func TestRestartInstance(t *testing.T) {
 						},
 					},
 				}
-				k8s.AppsV1().Deployments("supa-test-instance").Create(context.Background(), deployment, metav1.CreateOptions{})
+				if _, err := k8s.AppsV1().Deployments("supa-test-instance").Create(context.Background(), deployment, metav1.CreateOptions{}); err != nil {
+					t.Fatalf("failed to create deployment: %v", err)
+				}
 			},
 			expectedStatus: http.StatusOK,
 			expectedError:  false,
@@ -366,9 +368,9 @@ func TestRestartInstance(t *testing.T) {
 		{
 			name:         "instance not found",
 			instanceName: "nonexistent",
-			setupMock: func(cr *mockCRClient, k8s *fake.Clientset) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
+			setupMock: func(cr *mockCRClient, _ *fake.Clientset) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+					return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
 				}
 			},
 			expectedStatus: http.StatusNotFound,
@@ -428,7 +430,7 @@ func TestGetLogs(t *testing.T) {
 			name:         "successful log retrieval",
 			instanceName: "test-instance",
 			setupMock: func(cr *mockCRClient, k8s *fake.Clientset) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: name,
@@ -453,7 +455,9 @@ func TestGetLogs(t *testing.T) {
 						},
 					},
 				}
-				k8s.CoreV1().Pods("supa-test-instance").Create(context.Background(), pod, metav1.CreateOptions{})
+				if _, err := k8s.CoreV1().Pods("supa-test-instance").Create(context.Background(), pod, metav1.CreateOptions{}); err != nil {
+					t.Fatalf("failed to create pod: %v", err)
+				}
 			},
 			expectedStatus: http.StatusOK,
 			expectedError:  false,
@@ -462,9 +466,9 @@ func TestGetLogs(t *testing.T) {
 		{
 			name:         "instance not found",
 			instanceName: "nonexistent",
-			setupMock: func(cr *mockCRClient, k8s *fake.Clientset) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
+			setupMock: func(cr *mockCRClient, _ *fake.Clientset) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+					return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
 				}
 			},
 			expectedStatus: http.StatusNotFound,
@@ -473,14 +477,14 @@ func TestGetLogs(t *testing.T) {
 		{
 			name:         "no pods found",
 			instanceName: "empty-instance",
-			setupMock: func(cr *mockCRClient, k8s *fake.Clientset) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+			setupMock: func(cr *mockCRClient, _ *fake.Clientset) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
-							Name: name,
+							Name: "empty-instance",
 						},
 						Spec: supacontrolv1alpha1.SupabaseInstanceSpec{
-							ProjectName: name,
+							ProjectName: "empty-instance",
 						},
 						Status: supacontrolv1alpha1.SupabaseInstanceStatus{
 							Namespace: "supa-empty-instance",

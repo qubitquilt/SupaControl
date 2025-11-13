@@ -194,7 +194,7 @@ func (o *Orchestrator) installHelmChart(namespace, releaseName, postgresPassword
 		chartPath = fmt.Sprintf("%s/%s", o.chartRepo, o.chartName)
 	}
 
-	cp, err := client.ChartPathOptions.LocateChart(chartPath, settings)
+	cp, err := client.LocateChart(chartPath, settings)
 	if err != nil {
 		return fmt.Errorf("failed to locate chart: %w", err)
 	}

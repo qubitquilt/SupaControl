@@ -1,3 +1,4 @@
+// Package api provides HTTP handlers for the SupaControl API.
 package api
 
 import (
@@ -76,7 +77,11 @@ func fetchContainerLogs(ctx context.Context, clientset K8sClient, namespace, pod
 		result.err = err
 		return result
 	}
-	defer podLogs.Close()
+	defer func() {
+		if closeErr := podLogs.Close(); closeErr != nil && result.err == nil {
+			result.err = closeErr
+		}
+	}()
 
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, podLogs)
@@ -89,7 +94,7 @@ func fetchContainerLogs(ctx context.Context, clientset K8sClient, namespace, pod
 	return result
 }
 
-// Health check endpoint
+// HealthCheck handles health check requests
 func (h *Handler) HealthCheck(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{
 		"status": "healthy",

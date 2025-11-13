@@ -28,11 +28,11 @@ func TestCreateInstance(t *testing.T) {
 			name:        "successful instance creation",
 			requestBody: `{"name":"test-app"}`,
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					// Return NotFound to indicate instance doesn't exist
-					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
+					return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
 				}
-				cr.createSupabaseInstanceFunc = func(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+				cr.createSupabaseInstanceFunc = func(_ context.Context, _ *supacontrolv1alpha1.SupabaseInstance) error {
 					return nil
 				}
 			},
@@ -43,11 +43,11 @@ func TestCreateInstance(t *testing.T) {
 			name:        "instance already exists",
 			requestBody: `{"name":"existing-app"}`,
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					// Return existing instance
 					return &supacontrolv1alpha1.SupabaseInstance{
 						ObjectMeta: metav1.ObjectMeta{
-							Name: name,
+							Name: "existing-app",
 						},
 					}, nil
 				}
@@ -58,14 +58,14 @@ func TestCreateInstance(t *testing.T) {
 		{
 			name:           "empty instance name",
 			requestBody:    `{"name":""}`,
-			setupMock:      func(cr *mockCRClient) {},
+			setupMock:      func(_ *mockCRClient) {},
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  true,
 		},
 		{
 			name:           "invalid request body",
 			requestBody:    `{invalid json}`,
-			setupMock:      func(cr *mockCRClient) {},
+			setupMock:      func(_ *mockCRClient) {},
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  true,
 		},
@@ -128,7 +128,7 @@ func TestListInstances(t *testing.T) {
 		{
 			name: "successful list with instances",
 			setupMock: func(cr *mockCRClient) {
-				cr.listSupabaseInstancesFunc = func(ctx context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error) {
+				cr.listSupabaseInstancesFunc = func(_ context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error) {
 					return &supacontrolv1alpha1.SupabaseInstanceList{
 						Items: []supacontrolv1alpha1.SupabaseInstance{
 							{
@@ -158,7 +158,7 @@ func TestListInstances(t *testing.T) {
 		{
 			name: "empty list",
 			setupMock: func(cr *mockCRClient) {
-				cr.listSupabaseInstancesFunc = func(ctx context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error) {
+				cr.listSupabaseInstancesFunc = func(_ context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error) {
 					return &supacontrolv1alpha1.SupabaseInstanceList{
 						Items: []supacontrolv1alpha1.SupabaseInstance{},
 					}, nil
@@ -171,7 +171,7 @@ func TestListInstances(t *testing.T) {
 		{
 			name: "kubernetes error",
 			setupMock: func(cr *mockCRClient) {
-				cr.listSupabaseInstancesFunc = func(ctx context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error) {
+				cr.listSupabaseInstancesFunc = func(_ context.Context) (*supacontrolv1alpha1.SupabaseInstanceList, error) {
 					return nil, fmt.Errorf("kubernetes api error")
 				}
 			},
@@ -235,13 +235,13 @@ func TestGetInstance(t *testing.T) {
 			name:         "successful get",
 			instanceName: "test-app",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
-						ObjectMeta: metav1.ObjectMeta{Name: name},
-						Spec:       supacontrolv1alpha1.SupabaseInstanceSpec{ProjectName: name},
+						ObjectMeta: metav1.ObjectMeta{Name: "test-app"},
+						Spec:       supacontrolv1alpha1.SupabaseInstanceSpec{ProjectName: "test-app"},
 						Status: supacontrolv1alpha1.SupabaseInstanceStatus{
 							Phase:     supacontrolv1alpha1.PhaseRunning,
-							Namespace: "supa-" + name,
+							Namespace: "supa-test-app",
 						},
 					}, nil
 				}
@@ -253,8 +253,8 @@ func TestGetInstance(t *testing.T) {
 			name:         "instance not found",
 			instanceName: "nonexistent",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+					return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
 				}
 			},
 			expectedStatus: http.StatusNotFound,
@@ -319,13 +319,13 @@ func TestDeleteInstance(t *testing.T) {
 			name:         "successful delete",
 			instanceName: "test-app",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
 					return &supacontrolv1alpha1.SupabaseInstance{
-						ObjectMeta: metav1.ObjectMeta{Name: name},
-						Spec:       supacontrolv1alpha1.SupabaseInstanceSpec{ProjectName: name},
+						ObjectMeta: metav1.ObjectMeta{Name: "test-app"},
+						Spec:       supacontrolv1alpha1.SupabaseInstanceSpec{ProjectName: "test-app"},
 					}, nil
 				}
-				cr.deleteSupabaseInstanceFunc = func(ctx context.Context, name string) error {
+				cr.deleteSupabaseInstanceFunc = func(_ context.Context, _ string) error {
 					return nil
 				}
 			},
@@ -336,8 +336,8 @@ func TestDeleteInstance(t *testing.T) {
 			name:         "instance not found",
 			instanceName: "nonexistent",
 			setupMock: func(cr *mockCRClient) {
-				cr.getSupabaseInstanceFunc = func(ctx context.Context, name string) (*supacontrolv1alpha1.SupabaseInstance, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{}, name)
+				cr.getSupabaseInstanceFunc = func(_ context.Context, _ string) (*supacontrolv1alpha1.SupabaseInstance, error) {
+					return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
 				}
 			},
 			expectedStatus: http.StatusNotFound,

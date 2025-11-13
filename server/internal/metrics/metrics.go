@@ -1,3 +1,4 @@
+// Package metrics provides Prometheus metrics instrumentation for SupaControl operations.
 package metrics
 
 import (

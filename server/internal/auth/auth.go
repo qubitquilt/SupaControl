@@ -1,3 +1,5 @@
+// Package auth provides authentication and authorization services for SupaControl.
+// It includes password hashing, API key management, and JWT token operations.
 package auth
 
 import (

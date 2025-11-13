@@ -189,7 +189,204 @@ helm package ./charts/supacontrol
 # Output: supacontrol-<version>.tgz
 ```
 
-## Code Style
+## Local Code Quality Checks
+
+SupaControl includes comprehensive local linting and code quality checks that mirror the CI pipeline, helping you catch issues before pushing code.
+
+### Quick Start
+
+```bash
+# Run all linting checks
+make lint
+
+# Auto-fix lintable issues
+make lint-fix
+
+# Run pre-commit checks (comprehensive local CI simulation)
+make pre-commit
+
+# Run full CI checks locally
+make ci
+```
+
+### Available Makefile Targets
+
+| Command | Description |
+|---------|-------------|
+| `make lint` | Run all linters (Go + UI) |
+| `make lint-fix` | Auto-fix lintable issues |
+| `make pre-commit` | Run comprehensive pre-flight checks |
+| `make format` | Format all code (Go + UI) |
+| `make ci` | Run full CI pipeline locally |
+
+### Local Pre-commit Hooks
+
+Enable automatic checks before every commit:
+
+**Option 1: Using pre-commit (Recommended)**
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Install the hooks
+pre-commit install
+
+# Run on all files (first time)
+pre-commit run --all-files
+
+# Update hooks
+pre-commit autoupdate
+```
+
+**Option 2: Manual Pre-commit Script**
+```bash
+# Run manually before committing
+./scripts/pre-commit.sh
+
+# Or add to your shell profile
+echo 'alias precommit="./scripts/pre-commit.sh"' >> ~/.zshrc
+```
+
+### Go Code Quality (Backend)
+
+**Required Tools:**
+- `golangci-lint` - Install with: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
+
+**Run Individual Checks:**
+```bash
+cd server
+
+# Format code
+go fmt ./...
+
+# Check for issues
+go vet ./...
+
+# Run comprehensive linting
+golangci-lint run
+
+# Auto-fix issues (if supported by linter)
+golangci-lint run --fix
+```
+
+**Configuration:**
+- See `.golangci.yml` for linter settings
+- Checks include: govet, errcheck, staticcheck, unused, ineffassign, gocritic, revive
+
+### React/Frontend Code Quality
+
+**Run Individual Checks:**
+```bash
+cd ui
+
+# Lint code
+npm run lint
+
+# Fix auto-fixable issues
+npm run lint -- --fix
+
+# Format code
+npm run format
+```
+
+**Configuration:**
+- ESLint configuration in `ui/.eslintrc.json`
+- Checks include: React best practices, unused variables, import ordering
+
+### Pre-commit Check Details
+
+The `make pre-commit` target runs:
+1. **Go Modules**: Verifies dependencies are tidy and verified
+2. **Backend Linting**: Runs go vet and golangci-lint
+3. **Frontend Linting**: Runs ESLint
+4. **Basic Tests**: Runs unit tests (non-blocking if they fail)
+5. **Common Issues**: Checks for TODO/FIXME comments, debug prints
+
+The `scripts/pre-commit.sh` script provides more detailed output and handles missing dependencies gracefully.
+
+### CI Pipeline Alignment
+
+Local checks mirror the CI pipeline stages:
+
+| CI Job | Local Equivalent | Command |
+|--------|------------------|---------|
+| Backend Tests | `make test` | `make test` |
+| Frontend Tests | UI test suite | `make ui-test` |
+| Backend Lint | Go linting | `make lint` (Go part) |
+| Frontend Lint | ESLint | `make lint` (UI part) |
+| Build | Binary build | `make build` |
+
+### Development Workflow
+
+**Before committing code:**
+```bash
+# 1. Auto-fix lintable issues
+make lint-fix
+
+# 2. Run all checks
+make pre-commit
+
+# 3. Run tests (if not included in pre-commit)
+make test
+```
+
+**Before pushing to remote:**
+```bash
+# Run full CI pipeline locally
+make ci
+
+# Or if you have pre-commit hooks enabled
+git add .
+git commit -m "Your commit message"
+# Pre-commit hooks will run automatically
+git push origin your-branch
+```
+
+### Troubleshooting
+
+**golangci-lint not found:**
+```bash
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+export PATH=$PATH:$(go env GOPATH)/bin
+```
+
+**Node.js dependencies missing:**
+```bash
+cd ui
+npm install
+```
+
+**Permission denied on pre-commit script:**
+```bash
+chmod +x scripts/pre-commit.sh
+```
+
+**Pre-commit hooks not running:**
+```bash
+# Check if hooks are installed
+cat .git/hooks/pre-commit
+
+# Reinstall hooks
+pre-commit install
+```
+
+### Code Style Standards
+
+**Go:**
+- Follow [Effective Go](https://golang.org/doc/effective_go.html)
+- Use gofmt for formatting
+- Add comments for exported functions
+- Handle errors explicitly
+- Run `go mod tidy` after adding dependencies
+
+**JavaScript/React:**
+- Use functional components with hooks
+- Follow React best practices
+- Use meaningful component/variable names
+- Keep components focused and reusable
+- Test user interactions
+
+## Code Style (Legacy)
 
 **Go:**
 ```bash

@@ -38,13 +38,13 @@ func TestInstanceMetrics(t *testing.T) {
 
 		// Increment
 		InstancesTotal.Inc()
-		after_inc := testutil.ToFloat64(InstancesTotal)
-		assert.Equal(t, initial+1, after_inc, "gauge should increment by 1")
+		afterInc := testutil.ToFloat64(InstancesTotal)
+		assert.Equal(t, initial+1, afterInc, "gauge should increment by 1")
 
 		// Decrement
 		InstancesTotal.Dec()
-		after_dec := testutil.ToFloat64(InstancesTotal)
-		assert.Equal(t, initial, after_dec, "gauge should decrement back to initial")
+		afterDec := testutil.ToFloat64(InstancesTotal)
+		assert.Equal(t, initial, afterDec, "gauge should decrement back to initial")
 	})
 
 	t.Run("InstanceCreationDuration records observations", func(t *testing.T) {
@@ -103,7 +103,7 @@ func TestSetInstanceStatus(t *testing.T) {
 func TestDeleteInstanceMetrics(t *testing.T) {
 	allPhases := []string{"Pending", "Provisioning", "Running", "Failed"}
 
-	t.Run("deletes all phase metrics for instance", func(t *testing.T) {
+	t.Run("deletes all phase metrics for instance", func(_ *testing.T) {
 		projectName := "test-instance-delete"
 
 		// Set instance status

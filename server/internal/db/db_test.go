@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/jmoiron/sqlx"
@@ -40,7 +39,9 @@ func TestNewClient(t *testing.T) {
 				t.Errorf("NewClient() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if client != nil {
-				client.Close()
+				if err := client.Close(); err != nil {
+					t.Errorf("Failed to close client: %v", err)
+				}
 			}
 		})
 	}
@@ -93,6 +94,7 @@ func TestClient_GetDB(t *testing.T) {
 	db := client.GetDB()
 	if db == nil {
 		t.Error("GetDB() returned nil")
+		return
 	}
 
 	// Verify it's the same underlying connection
@@ -453,7 +455,11 @@ func TestClient_WithinTransaction_CommitError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			t.Errorf("Failed to rollback transaction: %v", rbErr)
+		}
+	}()
 
 	// Lock the user row
 	var lockedUser User
@@ -483,11 +489,15 @@ func TestClient_BeginTx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginTx() failed: %v", err)
 	}
-	defer tx.Rollback()
 
 	if tx == nil {
 		t.Fatal("Expected non-nil transaction")
 	}
+	defer func() {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			t.Errorf("Failed to rollback transaction: %v", rbErr)
+		}
+	}()
 
 	// Test that we can use the transaction
 	_, err = tx.Exec("SELECT 1")
@@ -508,7 +518,11 @@ func TestClient_RunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("Failed to close client: %v", closeErr)
+		}
+	}()
 
 	// Clean all tables first
 	tables := []string{"api_keys", "users"}
@@ -517,7 +531,7 @@ func TestClient_RunMigrations(t *testing.T) {
 	}
 
 	// Test migration
-	migrationsPath := filepath.Join("migrations")
+	migrationsPath := "migrations"
 	err = client.RunMigrations(migrationsPath)
 	if err != nil {
 		t.Fatalf("RunMigrations() failed: %v", err)
@@ -529,8 +543,8 @@ func TestClient_RunMigrations(t *testing.T) {
 		var exists bool
 		err := client.db.Get(&exists,
 			`SELECT EXISTS (
-				SELECT FROM information_schema.tables 
-				WHERE table_schema = 'public' 
+				SELECT FROM information_schema.tables
+				WHERE table_schema = 'public'
 				AND table_name = $1
 			)`, table)
 		if err != nil {

@@ -1,3 +1,4 @@
+// Package controllers provides Kubernetes job management functionality for SupaControl.
 package controllers
 
 import (
