@@ -111,25 +111,25 @@ export async function installHelm(
     console.log(`Starting installation of '${releaseName}' in namespace '${namespace}'...`);
     console.log(`Chart path: ${chartPath}`);
     console.log(`Values file: ${valuesPath}`);
-    
+
     // First check if release already exists
     const existingRelease = await checkHelmRelease(namespace, releaseName);
-    
+
     if (existingRelease) {
       // If release exists, try to upgrade instead
       console.log(`Release '${releaseName}' already exists. Attempting upgrade...`);
       return await upgradeHelm(namespace, releaseName, valuesPath, chartPath);
     }
-    
+
     // Validate pre-flight conditions
     console.log('Validating pre-flight conditions...');
     const helmCheck = await checkHelmConnection();
     if (!helmCheck.working) {
       throw new Error(`Helm validation failed: ${helmCheck.error}`);
     }
-    
+
     console.log('Pre-flight validation passed');
-    
+
     // Do a dry-run first to validate the installation
     console.log('Performing dry-run validation...');
     try {
@@ -150,9 +150,9 @@ export async function installHelm(
       console.log('Dry-run failed:', dryRunError.message);
       // Continue anyway, dry-run can fail for various reasons
     }
-    
+
     console.log('Starting actual installation...');
-    
+
     // Now do the actual installation
     const { stdout } = await runHelmCommand([
       'install',
@@ -171,10 +171,10 @@ export async function installHelm(
     return { success: true, output: stdout, action: 'install' };
   } catch (error: any) {
     console.error('Helm install error:', error.message);
-    
+
     // Enhanced error handling
     let errorMessage = error.message;
-    
+
     if (error.message?.includes('Command timeout')) {
       errorMessage = `Helm install timed out after 2 minutes. This typically indicates: 1) Slow cluster response, 2) Network connectivity issues, 3) Resource constraints, or 4) Image pull issues. Check: kubectl get pods -n ${namespace} && kubectl get events -n ${namespace}`;
     } else if (error.isTimeout) {
@@ -196,7 +196,7 @@ export async function installHelm(
     } else if (error.message?.includes('could not get apiVersions from Kubernetes')) {
       errorMessage = 'Cannot connect to Kubernetes cluster. Verify kubectl cluster-info shows your cluster.';
     }
-    
+
     return { success: false, error: errorMessage, output: error.stdout };
   }
 }
@@ -232,7 +232,7 @@ export async function upgradeHelm(
     console.log(`Attempting to upgrade release '${releaseName}' in namespace '${namespace}'...`);
     console.log(`Chart path: ${chartPath}`);
     console.log(`Values file: ${valuesPath}`);
-    
+
     // First, try a dry-run to validate the upgrade without actually executing it
     console.log('Performing dry-run validation...');
     try {
@@ -252,9 +252,9 @@ export async function upgradeHelm(
       console.log('Dry-run failed:', dryRunError.message);
       // Continue anyway, dry-run can fail for various reasons
     }
-    
+
     console.log('Starting actual upgrade...');
-    
+
     // Now do the actual upgrade with a shorter timeout and better error handling
     const { stdout } = await runHelmCommand([
       'upgrade',
@@ -272,10 +272,10 @@ export async function upgradeHelm(
     return { success: true, output: stdout, action: 'upgrade' };
   } catch (error: any) {
     console.error('Helm upgrade error:', error.message);
-    
+
     // Enhanced error handling with specific timeout detection
     let errorMessage = error.message;
-    
+
     if (error.message?.includes('Command timeout')) {
       errorMessage = `Helm upgrade timed out after 70 seconds. This typically indicates: 1) Slow cluster response, 2) Network connectivity issues, 3) Resource constraints, or 4) Stuck pods. Try: kubectl get pods -n ${namespace} && kubectl get events -n ${namespace}`;
     } else if (error.isTimeout || error.message?.includes('timed out')) {
@@ -291,7 +291,7 @@ export async function upgradeHelm(
     } else if (error.message?.includes('could not get apiVersions from Kubernetes')) {
       errorMessage = 'Cannot connect to Kubernetes cluster. Verify kubectl cluster-info shows your cluster.';
     }
-    
+
     return { success: false, error: errorMessage, output: error.stdout };
   }
 }
@@ -363,7 +363,7 @@ export async function checkPodStatus(namespace: string, releaseName: string): Pr
       // Check for image pull errors
       const containerStatuses = item.status.containerStatuses || [];
       const imagePullErrors: string[] = [];
-      
+
       for (const cs of containerStatuses) {
         if (cs.state?.waiting?.reason === 'ErrImagePull' || cs.state?.waiting?.reason === 'ImagePullBackOff') {
           imagePullErrors.push(`Container ${cs.name}: ${cs.state.waiting.message || cs.state.waiting.reason}`);
@@ -382,20 +382,20 @@ export async function checkPodStatus(namespace: string, releaseName: string): Pr
     }
 
     // Check if all pods are running successfully
-    const allPodsRunning = pods.length > 0 && pods.every(pod => 
+    const allPodsRunning = pods.length > 0 && pods.every(pod =>
       pod.status === 'Running' && !pod.imagePullErrors?.length
     );
 
-    return { 
-      success: allPodsRunning, 
-      pods, 
-      errors: errors.length > 0 ? errors : [] 
+    return {
+      success: allPodsRunning,
+      pods,
+      errors: errors.length > 0 ? errors : []
     };
   } catch (error: any) {
-    return { 
-      success: false, 
-      pods: [], 
-      errors: [`Failed to check pod status: ${error.message}`] 
+    return {
+      success: false,
+      pods: [],
+      errors: [`Failed to check pod status: ${error.message}`]
     };
   }
 }

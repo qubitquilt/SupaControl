@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jmoiron/sqlx"
@@ -28,6 +30,11 @@ func TestNewClient(t *testing.T) {
 		{
 			name:    "empty DSN",
 			dsn:     "",
+			wantErr: true,
+		},
+		{
+			name:    "unreachable database",
+			dsn:     "postgres://user:pass@10.255.255.1:5432/db?sslmode=disable",
 			wantErr: true,
 		},
 	}
@@ -107,6 +114,22 @@ func TestClient_GetDB(t *testing.T) {
 	if err != nil {
 		t.Errorf("Ping on returned DB failed: %v", err)
 	}
+}
+
+func TestClient_ConnectionPoolConfiguration(t *testing.T) {
+	client, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	db := client.GetDB()
+	stats := db.Stats()
+
+	// Verify connection pool settings
+	if stats.MaxOpenConnections != 25 {
+		t.Errorf("MaxOpenConnections = %d, want 25", stats.MaxOpenConnections)
+	}
+
+	// Note: MaxIdleConnections cannot be directly verified from DBStats
+	// as it's not exposed, but we verify MaxOpenConnections is set correctly
 }
 
 func TestClient_CreateUser(t *testing.T) {
@@ -191,6 +214,26 @@ func TestClient_CreateUser(t *testing.T) {
 			t.Error("Expected error for duplicate username")
 		}
 	})
+
+	// Test database error during CreateUser
+	t.Run("database error during CreateUser", func(t *testing.T) {
+		// Create a separate client for error simulation
+		testDSN := os.Getenv("TEST_DATABASE_URL")
+		if testDSN == "" {
+			t.Skip("TEST_DATABASE_URL not set")
+		}
+		errorClient, err := NewClient(testDSN)
+		if err != nil {
+			t.Fatalf("Failed to create error client: %v", err)
+		}
+		// Close it immediately to simulate failure
+		_ = errorClient.Close()
+
+		_, err = errorClient.CreateUser("failuser", "failhash", "admin")
+		if err == nil {
+			t.Error("Expected error when database connection is closed")
+		}
+	})
 }
 
 func TestClient_GetUserByUsername(t *testing.T) {
@@ -249,6 +292,26 @@ func TestClient_GetUserByUsername(t *testing.T) {
 			}
 		})
 	}
+
+	// Test database error during GetUserByUsername
+	t.Run("database error during GetUserByUsername", func(t *testing.T) {
+		// Create a separate client for error simulation
+		testDSN := os.Getenv("TEST_DATABASE_URL")
+		if testDSN == "" {
+			t.Skip("TEST_DATABASE_URL not set")
+		}
+		errorClient, err := NewClient(testDSN)
+		if err != nil {
+			t.Fatalf("Failed to create error client: %v", err)
+		}
+		// Close it immediately to simulate failure
+		_ = errorClient.Close()
+
+		_, err = errorClient.GetUserByUsername("testuser")
+		if err == nil {
+			t.Error("Expected error when database connection is closed")
+		}
+	})
 }
 
 func TestClient_GetUserByID(t *testing.T) {
@@ -313,6 +376,26 @@ func TestClient_GetUserByID(t *testing.T) {
 			}
 		})
 	}
+
+	// Test database error during GetUserByID
+	t.Run("database error during GetUserByID", func(t *testing.T) {
+		// Create a separate client for error simulation
+		testDSN := os.Getenv("TEST_DATABASE_URL")
+		if testDSN == "" {
+			t.Skip("TEST_DATABASE_URL not set")
+		}
+		errorClient, err := NewClient(testDSN)
+		if err != nil {
+			t.Fatalf("Failed to create error client: %v", err)
+		}
+		// Close it immediately to simulate failure
+		_ = errorClient.Close()
+
+		_, err = errorClient.GetUserByID(created.ID)
+		if err == nil {
+			t.Error("Expected error when database connection is closed")
+		}
+	})
 }
 
 func TestClient_WithinTransaction_Success(t *testing.T) {
@@ -444,41 +527,53 @@ func TestClient_WithinTransaction_Panic(t *testing.T) {
 }
 
 func TestClient_WithinTransaction_CommitError(t *testing.T) {
-	client, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	// Create a user to work with
-	testUser := createTestUserWithDefaults(t, client)
-
-	// Start a transaction manually to hold a lock
-	tx, err := client.db.Beginx()
+	// Create a separate client for this test to avoid interfering with shared connections
+	testDSN := os.Getenv("TEST_DATABASE_URL")
+	if testDSN == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	client, err := NewClient(testDSN)
 	if err != nil {
-		t.Fatalf("Failed to begin transaction: %v", err)
+		t.Fatalf("Failed to create test client: %v", err)
 	}
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			t.Errorf("Failed to rollback transaction: %v", rbErr)
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("Failed to close test client: %v", closeErr)
 		}
 	}()
 
-	// Lock the user row
-	var lockedUser User
-	err = tx.Get(&lockedUser, "SELECT * FROM users WHERE id = $1 FOR UPDATE", testUser.ID)
-	if err != nil {
-		t.Fatalf("Failed to lock user: %v", err)
-	}
+	// Test commit failure by closing the database connection during transaction
+	// This simulates a connection loss that would cause commit to fail
+	var commitError error
+	err = client.WithinTransaction(func(tx *sqlx.Tx) error {
+		// Perform some operation
+		_, err := tx.Exec("SELECT 1")
+		if err != nil {
+			return err
+		}
 
-	// This won't cause a commit error because we're using a different transaction
-	// Instead, let's test by ensuring the function completes successfully
-	err = client.WithinTransaction(func(tx2 *sqlx.Tx) error {
-		// Simple operation that should succeed
-		_, err := tx2.Exec("SELECT 1")
-		return err
+		// Close the underlying database connection to force commit failure
+		_ = client.db.Close()
+
+		return nil
 	})
 
-	if err != nil {
-		t.Errorf("WithinTransaction() error = %v, want nil", err)
+	// The transaction should fail during commit due to closed connection
+	if err == nil {
+		t.Error("Expected WithinTransaction to fail due to commit error after connection close")
 	}
+
+	// Store the error for verification
+	commitError = err
+
+	if commitError != nil && !contains(commitError.Error(), "commit") && !contains(commitError.Error(), "closed") {
+		t.Errorf("Expected commit-related error, got: %v", commitError)
+	}
+}
+
+// Helper function to check if string contains substring
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
 }
 
 func TestClient_BeginTx(t *testing.T) {
@@ -503,6 +598,35 @@ func TestClient_BeginTx(t *testing.T) {
 	_, err = tx.Exec("SELECT 1")
 	if err != nil {
 		t.Errorf("Failed to execute query on transaction: %v", err)
+	}
+}
+
+func TestClient_BeginTx_AfterClose(t *testing.T) {
+	// Create a separate client for this test
+	testDSN := os.Getenv("TEST_DATABASE_URL")
+	if testDSN == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	client, err := NewClient(testDSN)
+	if err != nil {
+		t.Fatalf("Failed to create test client: %v", err)
+	}
+	defer func() {
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("Failed to close test client: %v", closeErr)
+		}
+	}()
+
+	// Close the client
+	err = client.Close()
+	if err != nil {
+		t.Fatalf("Failed to close client: %v", err)
+	}
+
+	// BeginTx should fail after Close
+	_, err = client.BeginTx()
+	if err == nil {
+		t.Error("Expected BeginTx to fail after Close")
 	}
 }
 
@@ -569,5 +693,62 @@ func TestClient_RunMigrations_InvalidPath(t *testing.T) {
 	err := client.RunMigrations("/nonexistent/path")
 	if err == nil {
 		t.Error("Expected error for invalid migrations path")
+	}
+}
+
+func TestClient_RunMigrations_InvalidSQL(t *testing.T) {
+	client, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Create a temporary directory for test migrations
+	tempDir := t.TempDir()
+
+	// Create a migration file with invalid SQL
+	invalidSQL := "INVALID SQL STATEMENT THAT WILL FAIL"
+	migrationFile := filepath.Join(tempDir, "001_invalid.sql")
+	err := os.WriteFile(migrationFile, []byte(invalidSQL), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test migration file: %v", err)
+	}
+
+	// Test that RunMigrations fails with invalid SQL
+	err = client.RunMigrations(tempDir)
+	if err == nil {
+		t.Error("Expected error for invalid SQL in migration file")
+	}
+}
+
+func TestClient_RunMigrations_FileReadError(t *testing.T) {
+	client, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Create a temporary directory for test migrations
+	tempDir := t.TempDir()
+
+	// Create a migration file
+	validSQL := "SELECT 1;"
+	migrationFile := filepath.Join(tempDir, "001_test.sql")
+	err := os.WriteFile(migrationFile, []byte(validSQL), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test migration file: %v", err)
+	}
+
+	// Remove read permissions from the file (if possible)
+	// Note: This may not work on all systems, but we can still test the error handling
+	err = os.Chmod(migrationFile, 0000)
+	if err != nil {
+		// If we can't change permissions, skip this test
+		t.Skip("Cannot change file permissions for test")
+		return
+	}
+	defer func() {
+		// Restore permissions for cleanup
+		_ = os.Chmod(migrationFile, 0644)
+	}()
+
+	// Test that RunMigrations fails when file cannot be read
+	err = client.RunMigrations(tempDir)
+	if err == nil {
+		t.Error("Expected error when migration file cannot be read")
 	}
 }
