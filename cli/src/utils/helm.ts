@@ -1,5 +1,5 @@
 import { stringify } from 'yaml';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { execa } from 'execa';
 
@@ -105,7 +105,8 @@ export async function installHelm(
   namespace: string,
   releaseName: string,
   valuesPath: string,
-  chartPath: string
+  chartPath: string,
+  dryRun: boolean = false
 ): Promise<{ success: boolean; output?: string; error?: string; action?: 'install' | 'upgrade' | 'cleanup' }> {
   try {
     console.log(`Starting installation of '${releaseName}' in namespace '${namespace}'...`);
@@ -118,7 +119,7 @@ export async function installHelm(
     if (existingRelease) {
       // If release exists, try to upgrade instead
       console.log(`Release '${releaseName}' already exists. Attempting upgrade...`);
-      return await upgradeHelm(namespace, releaseName, valuesPath, chartPath);
+      return await upgradeHelm(namespace, releaseName, valuesPath, chartPath, dryRun);
     }
 
     // Validate pre-flight conditions
@@ -129,6 +130,13 @@ export async function installHelm(
     }
 
     console.log('Pre-flight validation passed');
+
+    if (dryRun) {
+      console.log('DRY RUN: Would perform Helm install with the following command:');
+      console.log(`helm install ${releaseName} ${chartPath} --namespace ${namespace} --create-namespace --values ${valuesPath} --wait --debug`);
+      console.log('DRY RUN: Installation simulation completed successfully (no changes applied).');
+      return { success: true, output: 'Dry run: Helm install simulated', action: 'install' };
+    }
 
     // Do a dry-run first to validate the installation
     console.log('Performing dry-run validation...');
@@ -226,7 +234,8 @@ export async function upgradeHelm(
   namespace: string,
   releaseName: string,
   valuesPath: string,
-  chartPath: string
+  chartPath: string,
+  dryRun: boolean = false
 ): Promise<{ success: boolean; output?: string; error?: string; action?: 'upgrade' }> {
   try {
     console.log(`Attempting to upgrade release '${releaseName}' in namespace '${namespace}'...`);
@@ -251,6 +260,13 @@ export async function upgradeHelm(
     } catch (dryRunError: any) {
       console.log('Dry-run failed:', dryRunError.message);
       // Continue anyway, dry-run can fail for various reasons
+    }
+
+    if (dryRun) {
+      console.log('DRY RUN: Would perform Helm upgrade with the following command:');
+      console.log(`helm upgrade ${releaseName} ${chartPath} --namespace ${namespace} --values ${valuesPath} --wait --debug`);
+      console.log('DRY RUN: Upgrade simulation completed successfully (no changes applied).');
+      return { success: true, output: 'Dry run: Helm upgrade simulated', action: 'upgrade' };
     }
 
     console.log('Starting actual upgrade...');
@@ -412,5 +428,138 @@ export async function checkHelmConnection(): Promise<{ working: boolean; error?:
     const errorMessage = error.isTimeout ? 'Helm command timed out' : error.message;
     console.error('Helm connection check failed:', errorMessage);
     return { working: false, error: errorMessage };
+  }
+}
+
+export async function checkRelease(namespace: string): Promise<{exists: boolean; version: string | null}> {
+  const releaseName = 'supacontrol';
+  try {
+    const {stdout} = await execa('helm', ['ls', '-n', namespace, '--output', 'json'], {timeout: 30000});
+    const releases: any[] = JSON.parse(stdout);
+    const release = releases.find((r: any) => r.name === releaseName);
+    if (release) {
+      // Extract version from chart name, e.g., 'supacontrol-0.1.0' -> '0.1.0'
+      const chartVersion = release.chart ? release.chart.split('-').slice(1).join('-') : null;
+      return {exists: true, version: chartVersion};
+    }
+    return {exists: false, version: null};
+  } catch (error: any) {
+    console.log(`No Helm releases found in namespace '${namespace}' or error: ${error.message}`);
+    return {exists: false, version: null};
+  }
+}
+
+export async function checkSupabaseInstance(namespace: string, instanceName: string): Promise<{exists: boolean}> {
+  try {
+    const {stdout} = await execa('kubectl', [
+      'get',
+      'supabaseinstance',
+      instanceName,
+      '-n',
+      namespace,
+      '--ignore-not-found',
+      '-o',
+      'json'
+    ], {timeout: 30000});
+    const data = JSON.parse(stdout);
+    // If not found, stdout is empty object {}
+    return {exists: Object.keys(data).length > 0 && data.kind === 'SupabaseInstance'};
+  } catch (error: any) {
+    console.log(`Error checking SupabaseInstance: ${error.message}`);
+    return {exists: false};
+  }
+}
+
+export function generateSupabaseInstance(config: any): string {
+  const spec = {
+    size: config.size || 'small',
+    version: config.version || 'latest',
+    components: config.components || { auth: true },
+    // Add database config if internal DB
+    database: config.installDatabase !== false ? {
+      size: 'small', // or from config
+    } : undefined,
+  };
+  const yamlObj = {
+    apiVersion: 'supacontrol.qubitquilt.com/v1alpha1',
+    kind: 'SupabaseInstance',
+    metadata: {
+      name: config.instanceName || 'supacontrol-instance',
+      namespace: 'supacontrol-system',
+    },
+    spec,
+  };
+  return stringify(yamlObj);
+}
+
+export async function applySupabaseInstance(yamlContent: string, namespace: string, dryRun: boolean = false): Promise<{success: boolean; output?: string; error?: string}> {
+  const tempPath = join('/tmp', `supabaseinstance-${Date.now()}.yaml`);
+  try {
+    await writeFile(tempPath, yamlContent, 'utf8');
+    const args = ['apply', '-f', tempPath, '--namespace', namespace];
+    if (dryRun) {
+      args.push('--dry-run=client');
+    }
+    const {stdout} = await execa('kubectl', args, {timeout: 60000});
+    if (dryRun) {
+      console.log('DRY RUN: SupabaseInstance would be applied');
+    } else {
+      console.log('✓ SupabaseInstance applied successfully');
+    }
+    return {success: true, output: stdout};
+  } catch (error: any) {
+    const errorMsg = `Failed to apply SupabaseInstance: ${error.message}`;
+    console.error(errorMsg);
+    return {success: false, error: errorMsg, output: error.stdout};
+  } finally {
+    try {
+      await unlink(tempPath);
+    } catch (error) {
+      const unlinkErr = error as Error;
+      console.warn(`Failed to delete temp file ${tempPath}: ${unlinkErr.message}`);
+    }
+  }
+}
+
+export async function applySecrets(config: any, namespace: string, dryRun: boolean = false): Promise<{success: boolean; error?: string}> {
+  const secretName = 'supacontrol-secrets';
+  try {
+    const literals: string[] = [];
+    if (config.jwtSecret) literals.push(`jwt-secret=${config.jwtSecret}`);
+    if (config.dbPassword) literals.push(`db-password=${config.dbPassword}`);
+    // Add more literals as needed, e.g., postgresPassword from config.secrets
+    if (config.secrets?.postgresPassword) literals.push(`postgres-password=${config.secrets.postgresPassword}`);
+    if (literals.length === 0) {
+      console.log('No secrets to apply');
+      return {success: true};
+    }
+
+    if (!dryRun) {
+      // Delete existing secret to force recreation/update
+      try {
+        await execa('kubectl', ['delete', 'secret', secretName, '-n', namespace, '--ignore-not-found=true'], {timeout: 10000});
+        console.log(`Existing secret '${secretName}' deleted (if existed)`);
+      } catch (deleteErr: any) {
+        if (!deleteErr.message.includes('NotFound')) {
+          console.warn(`Warning: Failed to delete existing secret: ${deleteErr.message}`);
+        }
+      }
+    }
+
+    const args = ['create', 'secret', 'generic', secretName, ...literals.map(lit => ['--from-literal', lit]).flat(), '-n', namespace];
+    if (dryRun) {
+      args.push('--dry-run=client', '-o', 'yaml');
+      const {stdout} = await execa('kubectl', args, {timeout: 30000});
+      console.log('DRY RUN: Would create/update secret');
+      console.log(stdout);
+    } else {
+      await execa('kubectl', args, {timeout: 30000});
+      console.log(`✓ Secret '${secretName}' created/updated successfully`);
+    }
+    return {success: true};
+  } catch (error: any) {
+    const errorMsg = `Failed to apply secrets: ${error.message}`;
+    console.error(errorMsg);
+    return {success: false, error: errorMsg};
   }
 }

@@ -5,7 +5,7 @@ replicaCount: 1
 image:
   repository: supacontrol/server
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: "v0.1.0"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -37,17 +37,13 @@ service:
 ingress:
   enabled: true
   className: "nginx"
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  annotations: {}
   hosts:
-    - host: supacontrol.example.com
+    - host: supacontrol.local
       paths:
         - path: /
           pathType: Prefix
-  tls:
-    - secretName: supacontrol-tls
-      hosts:
-        - supacontrol.example.com
+  tls: []
 
 resources:
   limits:
@@ -72,14 +68,14 @@ affinity: {}
 # Application Configuration
 config:
   # REQUIRED: Set a secure JWT secret for authentication
-  jwtSecret: ""
+  jwtSecret: "f59b0603f47248f02d4f723b2991f0d344f3e2279395817d7f11cad23af066ea"
 
   database:
     host: "supacontrol-postgresql"  # Use internal PostgreSQL service
     port: "5432"
     user: "supacontrol"
     # REQUIRED: Set a secure password for the database user
-    password: ""
+    password: "f1426f1a4b5c0b9fc72c6ee337ed3030af9703956d76ceeca56152ed7a95527d"
     name: "supacontrol"
 
   kubernetes:
@@ -102,8 +98,12 @@ postgresql:
   auth:
     username: supacontrol
     # REQUIRED: Set a secure password for the PostgreSQL database (or leave empty for auto-generation)
-    password: ""
+    password: "f1426f1a4b5c0b9fc72c6ee337ed3030af9703956d76ceeca56152ed7a95527d"
     database: supacontrol
+  global:
+    postgresql:
+      auth:
+        postgresPassword: "f1426f1a4b5c0b9fc72c6ee337ed3030af9703956d76ceeca56152ed7a95527d"
   primary:
     persistence:
       enabled: true
