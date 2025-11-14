@@ -5,7 +5,7 @@
 -- Password: admin (CHANGE THIS IN PRODUCTION!)
 -- Password hash generated using argon2
 INSERT INTO users (username, password_hash, role)
-VALUES ('admin', '$argon2id$v=19$m=65536,t=3,p=2$c29tZXNhbHQxMjM0NTY3OA$YxLivdd9n0N6UjXPjpRwfC7UmvKGjjYEDyJmZ9w7hPs', 'admin')
+VALUES ('admin', '$argon2id$v=19$m=65536,t=3,p=2$Bf6ExJJ5cMiNs0KvwcTt1g$yMF+Kkkk7JwmjLd+yZviCJo5FoTrKuLpKOSrk3cTLoM', 'admin')
 ON CONFLICT (username) DO NOTHING;
 
 -- Note: In production, you should:

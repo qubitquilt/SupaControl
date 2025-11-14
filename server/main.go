@@ -26,6 +26,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/qubitquilt/supacontrol/server/api"
 	supacontrolv1alpha1 "github.com/qubitquilt/supacontrol/server/api/v1alpha1"
@@ -115,6 +116,7 @@ func run() error {
 		// LeaderElection for HA deployments (configured via LEADER_ELECTION_ENABLED env var)
 		LeaderElection:   cfg.LeaderElectionEnabled,
 		LeaderElectionID: "supacontrol-leader-election",
+		Metrics:          server.Options{BindAddress: "0"},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create controller manager: %w", err)
@@ -174,6 +176,10 @@ func run() error {
 	uiPath := filepath.Join("..", "ui", "dist")
 	if _, err := os.Stat(uiPath); err == nil {
 		e.Static("/", uiPath)
+		// Catch-all route for SPA routing: serve index.html for non-API routes
+		e.GET("/*", func(c echo.Context) error {
+			return c.File(filepath.Join(uiPath, "index.html"))
+		})
 		log.Printf("Serving UI from %s", uiPath)
 	} else {
 		log.Println("UI not found - API only mode")
