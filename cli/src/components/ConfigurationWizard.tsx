@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import { generateJWTSecret, generateDatabasePassword } from '../utils/secrets.js';
+import { loadConfig, saveConfig } from '../utils/config.js';
 
 export interface Configuration {
   namespace: string;
@@ -23,9 +24,13 @@ export interface Configuration {
 
 interface ConfigurationWizardProps {
   onComplete: (config: Configuration) => void;
+  initialConfig?: Partial<Configuration>;
+  nonInteractive?: boolean;
+  configFile?: string;
 }
 
 type Step =
+  | 'passphrase'
   | 'namespace'
   | 'releaseName'
   | 'ingressHost'
@@ -40,9 +45,10 @@ type Step =
   | 'dbName'
   | 'dbPassword'
   | 'secrets'
+  | 'savePassphrase'
   | 'confirm';
 
-export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComplete }) => {
+export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComplete, initialConfig: propInitialConfig, nonInteractive: propNonInteractive, configFile }) => {
   const [step, setStep] = useState<Step>('namespace');
   const [config, setConfig] = useState<Partial<Configuration>>({
     namespace: 'supacontrol',
@@ -56,6 +62,121 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
     dbUser: 'supacontrol',
     dbName: 'supacontrol',
   });
+
+  const [initialConfig, setInitialConfig] = useState<Partial<Configuration>>({});
+  const [isNonInteractive, setIsNonInteractive] = useState(propNonInteractive || false);
+  const [passphraseInput, setPassphraseInput] = useState('');
+  const [savePassphraseInput, setSavePassphraseInput] = useState('');
+  const [configPassphrase, setConfigPassphrase] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const init = async () => {
+      const nonInteractive = propNonInteractive || !!process.env.NON_INTERACTIVE;
+      try {
+        let loadedRaw: any;
+        if (nonInteractive && configFile) {
+          loadedRaw = await loadConfig(configFile);
+        } else {
+          loadedRaw = await loadConfig();
+        }
+        if ('needsPassphrase' in loadedRaw && loadedRaw.needsPassphrase) {
+          if (nonInteractive) {
+            const envPass = process.env.SUPACTL_CONFIG_PASSPHRASE;
+            if (!envPass) {
+              throw new Error('Passphrase required for non-interactive mode with encrypted config. Set SUPACTL_CONFIG_PASSPHRASE.');
+            }
+            loadedRaw = await loadConfig(configFile || undefined, envPass);
+            setConfigPassphrase(envPass);
+          } else {
+            setStep('passphrase');
+            return;
+          }
+        }
+        let loaded: Partial<Configuration> = {
+          namespace: loadedRaw.namespace,
+          releaseName: loadedRaw.releaseName,
+          ingressHost: loadedRaw.ingressHost,
+          ingressDomain: loadedRaw.ingressDomain,
+          ingressClass: loadedRaw.ingressClass,
+          tlsEnabled: loadedRaw.tlsEnabled,
+          certManagerIssuer: loadedRaw.certManagerIssuer,
+          installDatabase: loadedRaw.installDatabase,
+          dbHost: loadedRaw.dbHost,
+          dbPort: loadedRaw.dbPort,
+          dbUser: loadedRaw.dbUser,
+          dbName: loadedRaw.dbName,
+        };
+        if (loadedRaw.secrets && typeof loadedRaw.secrets === 'object' && !('encrypted' in loadedRaw.secrets)) {
+          if (loadedRaw.secrets.postgresPassword) {
+            loaded.dbPassword = loadedRaw.secrets.postgresPassword;
+          }
+          if ((loadedRaw.secrets as any).jwtSecret) {
+            loaded.jwtSecret = (loadedRaw.secrets as any).jwtSecret;
+          }
+        }
+        if (nonInteractive) {
+          if (Object.keys(loaded).length === 0) {
+            throw new Error('No saved configuration found. Cannot proceed in non-interactive mode.');
+          }
+          if (loaded.installDatabase === false) {
+            if (!loaded.dbHost || !loaded.dbPort || !loaded.dbUser || !loaded.dbName || !loaded.dbPassword) {
+              throw new Error('Missing required external database configuration in non-interactive mode.');
+            }
+          }
+          setInitialConfig(loaded);
+          let fullConfig = { ...config, ...loaded } as Partial<Configuration>;
+          if (!fullConfig.jwtSecret) {
+            fullConfig.jwtSecret = generateJWTSecret();
+          }
+          if (fullConfig.installDatabase && !fullConfig.dbPassword) {
+            fullConfig.dbPassword = generateDatabasePassword();
+          }
+          setConfig(fullConfig);
+          setIsNonInteractive(true);
+          setStep('confirm');
+          return;
+        }
+        setInitialConfig(loaded);
+        setConfig(prev => ({ ...prev, ...loaded }));
+      } catch (error: any) {
+        if (nonInteractive) {
+          console.error(error.message);
+          process.exit(1);
+        } else {
+          console.warn(`Failed to load saved config: ${error.message}`);
+        }
+      }
+    };
+    init();
+  }, [propNonInteractive, configFile]);
+
+  useEffect(() => {
+    if (step === 'tlsEnabled' && config.tlsEnabled !== undefined) {
+      nextStep();
+    }
+  }, [step, config.tlsEnabled]);
+
+  useEffect(() => {
+    if (step === 'installDatabase' && config.installDatabase !== undefined) {
+      if (!config.installDatabase) {
+        setStep('dbHost');
+      } else {
+        nextStep();
+      }
+    }
+  }, [step, config.installDatabase]);
+
+  useEffect(() => {
+    if (step === 'confirm' && isNonInteractive) {
+      confirmAndContinue();
+    }
+  }, [step, isNonInteractive]);
+
+  useEffect(() => {
+    if (step === 'secrets' && config.jwtSecret && (config.installDatabase || config.dbPassword)) {
+      generateSecrets();
+    }
+  }, [step, config.jwtSecret, config.dbPassword, config.installDatabase]);
 
   // Helper function to get missing required database fields for external database
   const getMissingDbFields = (config: Partial<Configuration>) => {
@@ -73,6 +194,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
 
   const nextStep = () => {
     const steps: Step[] = [
+      'passphrase',
       'namespace',
       'releaseName',
       'ingressHost',
@@ -83,6 +205,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
       'installDatabase',
       ...(config.installDatabase === false ? ['dbHost', 'dbPort', 'dbUser', 'dbName', 'dbPassword'] : []),
       'secrets',
+      'savePassphrase',
       'confirm',
     ] as Step[];
 
@@ -93,26 +216,62 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
   };
 
   const generateSecrets = () => {
-    const newConfig = {
-      ...config,
-      jwtSecret: generateJWTSecret(),
-    };
-
-    // Only generate new database password if installing a new database
-    if (config.installDatabase) {
-      newConfig.dbPassword = generateDatabasePassword();
+    const newConfig = { ...config };
+    let needsGeneration = false;
+    if (!newConfig.jwtSecret) {
+      newConfig.jwtSecret = generateJWTSecret();
+      needsGeneration = true;
     }
-
+    if (config.installDatabase && !newConfig.dbPassword) {
+      newConfig.dbPassword = generateDatabasePassword();
+      needsGeneration = true;
+    }
+    if (needsGeneration) {
+      console.log('Generated missing secrets.');
+    } else {
+      console.log('Using saved secrets.');
+    }
     setConfig(newConfig);
     nextStep();
   };
 
-  const confirmAndContinue = () => {
-    // Validate required fields for external database
+  const confirmAndContinue = async () => {
     const missingFields = getMissingDbFields(config);
     if (missingFields.length > 0) {
       setStep(missingFields[0] as Step);
       return;
+    }
+
+    const currentNonSecret = { ...config };
+    delete currentNonSecret.jwtSecret;
+    delete currentNonSecret.dbPassword;
+    const initialNonSecret = { ...initialConfig };
+    delete initialNonSecret.jwtSecret;
+    delete initialNonSecret.dbPassword;
+    const hasChanges = JSON.stringify(currentNonSecret) !== JSON.stringify(initialNonSecret) ||
+      (config.dbPassword && config.dbPassword !== initialConfig.dbPassword);
+
+    if (hasChanges) {
+      try {
+        const saveObj: any = { ...currentNonSecret };
+        if (config.dbPassword) {
+          saveObj.secrets = {
+            postgresPassword: config.dbPassword,
+          };
+        }
+        if (config.jwtSecret) {
+          if (!saveObj.secrets) saveObj.secrets = {};
+          saveObj.secrets.jwtSecret = config.jwtSecret;
+        }
+        if (!configPassphrase) {
+          console.warn('No passphrase set; saving without encryption.');
+        } else {
+          await saveConfig(saveObj, configPassphrase);
+        }
+        console.log('Updated configuration saved.');
+      } catch (saveError: any) {
+        console.warn(`Failed to save updated config: ${saveError.message}`);
+      }
     }
 
     onComplete(config as Configuration);
@@ -331,15 +490,24 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
 
       {step === 'dbPassword' && (
         <Box flexDirection="column">
-          <Text>Enter the password for your existing PostgreSQL database:</Text>
+          <Text>Enter the password for your existing PostgreSQL database{initialConfig.dbPassword ? ' (press Enter to use saved)' : ''}:</Text>
           <Text dimColor>(This should be the password for the database user you specified above)</Text>
           <Box marginTop={1}>
             <Text color="green">➜ </Text>
             <TextInput
-              value={config.dbPassword || ''}
+              value=""
               onChange={(value) => handleInput('dbPassword', value)}
-              onSubmit={nextStep}
-              placeholder="Your database password"
+              onSubmit={(inputValue) => {
+                if (inputValue.trim()) {
+                  handleInput('dbPassword', inputValue);
+                } else if (initialConfig.dbPassword) {
+                  // Use saved
+                  handleInput('dbPassword', initialConfig.dbPassword);
+                }
+                nextStep();
+              }}
+              placeholder={initialConfig.dbPassword ? "Press Enter to use saved password" : "Your database password (required)"}
+              showCursor={true}
             />
           </Box>
         </Box>
@@ -420,7 +588,9 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
                   {!config.dbPassword ? (
                     <Text bold color="red">MISSING - Please provide database password</Text>
                   ) : (
-                    <Text bold color="yellow">Provided by user ✓</Text>
+                    <Text bold color={initialConfig.dbPassword && config.dbPassword === initialConfig.dbPassword ? "green" : "yellow"}>
+                      {initialConfig.dbPassword && config.dbPassword === initialConfig.dbPassword ? "Loaded from config ✓" : "Provided by user ✓"}
+                    </Text>
                   )}
                 </Text>
               </>
@@ -433,7 +603,7 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
             )}
             <Text>
               <Text color="gray">JWT Secret: </Text>
-              <Text bold color="green">Generated ✓</Text>
+              <Text bold color={initialConfig.jwtSecret ? "green" : "yellow"}>{initialConfig.jwtSecret ? "Loaded from config ✓" : "Generated ✓"}</Text>
             </Text>
           </Box>
 
@@ -487,6 +657,98 @@ export const ConfigurationWizard: React.FC<ConfigurationWizardProps> = ({ onComp
             <Text color="green">➜ </Text>
             <TextInput value="" onChange={(value: string) => {}} onSubmit={confirmAndContinue} showCursor={false} />
           </Box>
+        </Box>
+      )}
+
+      {step === 'passphrase' && (
+        <Box flexDirection="column">
+          <Text bold color="yellow">🔐 Enter passphrase for existing configuration</Text>
+          <Text dimColor>(To decrypt saved secrets)</Text>
+          <Box marginTop={1}>
+            <Text color="green">➜ </Text>
+            <TextInput
+              value={passphraseInput}
+              onChange={setPassphraseInput}
+              onSubmit={async (value) => {
+                if (!value.trim()) {
+                  return;
+                }
+                try {
+                  const loadedWithPass = await loadConfig(undefined, value);
+                  let loaded: Partial<Configuration> = {
+                    namespace: loadedWithPass.namespace,
+                    releaseName: loadedWithPass.releaseName,
+                    ingressHost: loadedWithPass.ingressHost,
+                    ingressDomain: loadedWithPass.ingressDomain,
+                    ingressClass: loadedWithPass.ingressClass,
+                    tlsEnabled: loadedWithPass.tlsEnabled,
+                    certManagerIssuer: loadedWithPass.certManagerIssuer,
+                    installDatabase: loadedWithPass.installDatabase,
+                    dbHost: loadedWithPass.dbHost,
+                    dbPort: loadedWithPass.dbPort,
+                    dbUser: loadedWithPass.dbUser,
+                    dbName: loadedWithPass.dbName,
+                  };
+                  if (loadedWithPass.secrets && typeof loadedWithPass.secrets === 'object' && !('encrypted' in loadedWithPass.secrets)) {
+                    if (loadedWithPass.secrets.postgresPassword) {
+                      loaded.dbPassword = loadedWithPass.secrets.postgresPassword;
+                    }
+                    if ((loadedWithPass.secrets as any).jwtSecret) {
+                      loaded.jwtSecret = (loadedWithPass.secrets as any).jwtSecret;
+                    }
+                  }
+                  setInitialConfig(loaded);
+                  setConfig(prev => ({ ...prev, ...loaded }));
+                  setConfigPassphrase(value);
+                  setPassphraseInput('');
+                  setStep('namespace');
+                } catch (error: any) {
+                  console.log('\n❌ Invalid passphrase or config error: ' + error.message + '\n');
+                  setPassphraseInput('');
+                }
+              }}
+              placeholder="Enter passphrase"
+              showCursor={true}
+            />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>If this is a new installation, delete ~/.supacontrol/config.json and restart.</Text>
+          </Box>
+        </Box>
+      )}
+
+      {step === 'savePassphrase' && (
+        <Box flexDirection="column">
+          <Text bold color="yellow">🔐 Set passphrase for config encryption</Text>
+          {configPassphrase ? (
+            <>
+              <Text>Using existing passphrase from loaded config.</Text>
+              <Box marginTop={1}>
+                <Text color="green">➜ Press Enter to continue</Text>
+                <TextInput value="" onChange={() => {}} onSubmit={nextStep} showCursor={false} />
+              </Box>
+            </>
+          ) : (
+            <>
+              <Text>Choose a passphrase to encrypt your config secrets.</Text>
+              <Text dimColor>(Keep it safe, you'll need it for future updates)</Text>
+              <Box marginTop={1}>
+                <Text color="green">➜ </Text>
+                <TextInput
+                  value={savePassphraseInput}
+                  onChange={setSavePassphraseInput}
+                  onSubmit={(value) => {
+                    if (!value.trim()) return;
+                    setConfigPassphrase(value);
+                    setSavePassphraseInput('');
+                    nextStep();
+                  }}
+                  placeholder="Choose a secure passphrase"
+                  showCursor={true}
+                />
+              </Box>
+            </>
+          )}
         </Box>
       )}
     </Box>
