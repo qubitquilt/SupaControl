@@ -147,5 +147,3 @@ require (
 replace github.com/qubitquilt/supacontrol/pkg/api-types => ../pkg/api-types
 
 replace k8s.io/leaderelection => k8s.io/leaderelection v0.28.4
-
-replace sigs.k8s.io/controller-runtime => /tmp/controller-runtime
