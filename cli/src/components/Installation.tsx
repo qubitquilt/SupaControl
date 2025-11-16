@@ -11,6 +11,7 @@ import { execa } from 'execa';
 interface InstallationProps {
   config: Configuration;
   onComplete: (success: boolean) => void;
+  dryRun?: boolean;
 }
 
 type InstallStep = 'init' | 'values' | 'install' | 'verify' | 'pods' | 'complete' | 'error';
@@ -22,7 +23,7 @@ interface StepStatus {
   error?: string;
 }
 
-export const Installation: React.FC<InstallationProps> = ({ config, onComplete }) => {
+export const Installation: React.FC<InstallationProps> = ({ config, onComplete, dryRun = false }) => {
   const [currentStep, setCurrentStep] = useState<InstallStep>('init');
   const [steps, setSteps] = useState<StepStatus[]>([
     { step: 'init', message: 'Initializing installation', status: 'pending' },
@@ -191,7 +192,8 @@ export const Installation: React.FC<InstallationProps> = ({ config, onComplete }
           config.namespace,
           config.releaseName,
           savedPath,
-          resolvedChartPath
+          resolvedChartPath,
+          dryRun
         );
 
         if (!result.success) {
