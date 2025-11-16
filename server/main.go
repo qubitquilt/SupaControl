@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -173,7 +174,11 @@ func run() error {
 	// This assumes the UI is built and available at ../ui/dist
 	uiPath := filepath.Join("..", "ui", "dist")
 	if _, err := os.Stat(uiPath); err == nil {
-		e.Static("/", uiPath)
+		e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
+			Root:  uiPath,
+			HTML5: true,
+			Index: "index.html",
+		}))
 		log.Printf("Serving UI from %s", uiPath)
 	} else {
 		log.Println("UI not found - API only mode")
