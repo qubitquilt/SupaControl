@@ -114,7 +114,7 @@ func createTestReconciler() *SupabaseInstanceReconciler {
 	return &SupabaseInstanceReconciler{
 		Client:               k8sClient,
 		Scheme:               scheme.Scheme,
-		ChartRepo:            "https://supabase-community.github.io/supabase-kubernetes",
+		ChartRepo:            "https://supabase.github.io/helm-charts",
 		ChartName:            "supabase",
 		ChartVersion:         "0.1.0",
 		DefaultIngressClass:  "nginx",

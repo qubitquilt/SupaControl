@@ -65,7 +65,7 @@ Before you start contributing, ensure you have:
 - Basic knowledge of Go and/or React (depending on contribution area)
 
 **Recommended:**
-- Go 1.21+ (for backend development)
+- Go 1.24+ (for backend development)
 - Node.js 18+ (for frontend/CLI development)
 - Docker (for running PostgreSQL locally)
 - kubectl and Helm (for Kubernetes testing)
@@ -478,43 +478,18 @@ test('updates instance description', async () => {
 });
 ```
 
-### Testing Your Changes Locally
-
-#### Testing Backend Changes
+#### Testing Your Changes Locally
 
 ```bash
+# Run all tests (backend and frontend)
+make test
+
+# Testing Backend Changes
 cd server
-
-# Run unit tests
-go test ./...
-
-# Run specific package tests
-go test ./internal/auth
-
-# Run with coverage
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-
-# Test on real Kubernetes cluster
-export KUBECONFIG=~/.kube/config
-go run main.go
-# Then test instance creation via API
-```
-
-#### Testing Frontend Changes
-
-```bash
+...
+# Testing Frontend Changes
 cd ui
-
-# Run tests
-npm test
-
-# Run with UI
-npm run test:ui
-
-# Manual testing
-npm run dev
-# Open http://localhost:5173 in browser
+...
 ```
 
 #### Integration Testing
@@ -634,14 +609,7 @@ test('creates instance when form is submitted', async () => {
 
 ### Test Coverage Goals
 
-**Current status:**
-- Backend: ~6% coverage
-- Frontend: ~6% coverage
-
-**Goals:**
-- Backend: 70%+ coverage
-- Frontend: 70%+ coverage
-- Critical paths: 90%+ coverage
+We aim for a high level of test coverage across all components to ensure stability and quality.
 
 **Priority areas for improvement:**
 1. API handlers

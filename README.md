@@ -64,7 +64,7 @@ SupaControl acts as a **control plane** that sits between you and your Kubernete
 **Without SupaControl:**
 ```bash
 # Manual Supabase deployment
-helm repo add supabase https://...
+helm repo add supabase https://supabase.github.io/helm-charts
 kubectl create namespace supa-myapp
 helm install myapp supabase/supabase -n supa-myapp -f custom-values.yaml
 kubectl apply -f ingress.yaml -n supa-myapp
@@ -86,33 +86,34 @@ curl -X POST https://supacontrol.example.com/api/v1/instances \
 
 ### Core Features
 
-- 🚀 **Automated Provisioning**: Deploy complete Supabase stacks with a single API call
-- 🔒 **Complete Isolation**: Each instance in its own dedicated Kubernetes namespace
-- 🔐 **Security First**: API key and JWT authentication, encrypted secrets management
-- 📊 **Persistent Inventory**: PostgreSQL for users and API keys only; instance state managed via Kubernetes CRDs. See [ADR 001](docs/adr/001-crd-as-single-source-of-truth.md) for details.
-- ⏳ **Asynchronous Operations**: Instance creation and deletion are asynchronous; poll `GET /api/v1/instances/:name` for status updates.
-- 🌐 **Web Dashboard**: Modern React-based UI for instance management
-- 🔑 **API Key Management**: Generate, list, and revoke keys for CLI/programmatic access
-- 🎯 **Status Monitoring**: Real-time instance health and deployment status
-- 🗑️ **Clean Deletion**: Automated cleanup of namespaces and resources
+- 🚀 **Automated Provisioning**: Deploy complete Supabase stacks with a single API call or `kubectl apply`.
+- 🔒 **Complete Isolation**: Each instance runs in its own dedicated Kubernetes namespace.
+- 🔐 **Security First**: API key and JWT authentication for the control plane.
+- 📊 **Declarative State**: Instance state is managed declaratively via `SupabaseInstance` Custom Resource Definitions (CRDs), the single source of truth.
+- 📦 **Operational Data Persistence**: PostgreSQL is used only for SupaControl's operational data (users, API keys), not for instance state. See [ADR 001](docs/adr/001-crd-as-single-source-of-truth.md).
+- ⏳ **Asynchronous Operations**: The controller uses a Job-based pattern for reliable, observable provisioning and cleanup. See [ADR 002](docs/adr/002-job-based-provisioning-pattern.md).
+- 🌐 **Web Dashboard**: A modern React-based UI for visual management.
+- 🔑 **API Key Management**: Generate, list, and revoke keys for CLI/programmatic access.
+- 🎯 **Status Monitoring**: Real-time instance health and deployment status reflected in the CRD status.
+- 🗑️ **Clean Deletion**: Automated, garbage-collected cleanup of all instance resources.
 
 ### Technical Highlights
 
-- **API-First Design**: Complete functionality exposed via REST API
-- **Kubernetes-Native**: Built on client-go and Helm v3 SDK
-- **Stateless Application**: Horizontally scalable for high availability
-- **Declarative Orchestration**: Kubernetes resources managed declaratively
-- **Multi-Tenant Ready**: Designed for managing dozens to hundreds of instances
-- **Production-Ready**: Includes health checks, logging, and error handling
-- **CI/CD Friendly**: Integrate with automated deployment pipelines
+- **API-First Design**: Complete functionality exposed via REST API.
+- **Kubernetes-Native**: Built as a proper Kubernetes operator with `controller-runtime`.
+- **Stateless Application**: The control plane is stateless and horizontally scalable.
+- **Declarative Orchestration**: Manage Supabase instances like any other Kubernetes resource.
+- **Multi-Tenant Ready**: Designed for managing dozens to hundreds of instances.
+- **Production-Ready**: Includes health checks, logging, and robust error handling.
+- **CI/CD & GitOps Friendly**: Integrate with CI/CD pipelines via the REST API or by managing CRDs in a Git repository.
 
 ### Use Cases
 
 **SaaS Multi-Tenancy**
 ```
-Customer A → Instance: supa-customer-a (dedicated database, isolated)
-Customer B → Instance: supa-customer-b (dedicated database, isolated)
-Customer C → Instance: supa-customer-c (dedicated database, isolated)
+Customer A → Instance: supa-customer-a (dedicated namespace, isolated)
+Customer B → Instance: supa-customer-b (dedicated namespace, isolated)
+Customer C → Instance: supa-customer-c (dedicated namespace, isolated)
 ```
 
 **Development Environments**
@@ -120,14 +121,6 @@ Customer C → Instance: supa-customer-c (dedicated database, isolated)
 Production  → Instance: supa-prod
 Staging     → Instance: supa-staging
 Development → Instance: supa-dev
-Testing     → Instance: supa-test
-```
-
-**Educational Institutions**
-```
-Student 1 → Instance: supa-student1 (isolated learning environment)
-Student 2 → Instance: supa-student2 (isolated learning environment)
-...
 ```
 
 ## Architecture
@@ -143,17 +136,16 @@ Student 2 → Instance: supa-student2 (isolated learning environment)
 │  ┌──────────────┐    ┌──────────────┐                  │
 │  │  Web UI      │    │  REST API    │                  │
 │  │  (React)     │◄───┤  (Echo/Go)   │◄─── API Clients │
-│  └──────────────┘    └──────┬───────┘                  │
+│  └──────────────┘    └──────┬───────┘    (CLI, GitOps)   │
 │                              │                           │
 │                    ┌─────────▼──────────┐               │
-│                    │   Orchestrator     │               │
-│                    │   (K8s + Helm)     │               │
+│                    │  Controller /      │               │
+│                    │  Operator          │               │
 │                    └─────────┬──────────┘               │
 │                              │                           │
-│                    ┌─────────▼──────────┐               │
-│                    │  Inventory DB      │               │
-│                    │  (PostgreSQL)      │               │
-│                    └────────────────────┘               │
+│  ┌───────────────────────────┴───────────────────────┐   │
+│  │ PostgreSQL DB (for Users/API Keys)  Kubernetes API│   │
+│  └───────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
                                │
                       ┌─────────▼──────────┐
@@ -176,19 +168,20 @@ For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Instance State Management
 
-SupaControl uses Kubernetes Custom Resource Definitions (CRDs) as the single source of truth for instance state. The `SupabaseInstance` CRD tracks the desired and actual state of each Supabase deployment, enabling declarative management and reconciliation.
+SupaControl uses Kubernetes Custom Resource Definitions (CRDs) as the single source of truth for instance state. The `SupabaseInstance` CRD tracks the desired and actual state of each Supabase deployment, enabling declarative management and reconciliation via the controller.
 
 ```
+User/API creates or modifies a...
 ┌─────────────────┐
 │   SupabaseInstance CRD   │
 │     (Desired State)      │
 └─────────┬───────────────┘
-          │ Watches
+          │ ...which is watched by the...
 ┌─────────▼──────────┐
 │   Controller       │
 │   (Reconciles)     │
 └─────────┬──────────┘
-          │ Creates/Manages
+          │ ...which creates/manages the...
           ▼
 ┌──────────────────┐
 │  Supabase Stack  │

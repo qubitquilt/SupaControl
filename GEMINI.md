@@ -1,6 +1,6 @@
-# CLAUDE.md - AI Assistant Guide for SupaControl
+# GEMINI.md - AI Assistant Guide for SupaControl
 
-This document provides guidance for AI assistants (like Claude) working with the SupaControl codebase. It includes architecture overview, development patterns, and common workflows.
+This document provides guidance for AI assistants (like Gemini) working with the SupaControl codebase. It includes architecture overview, development patterns, and common workflows.
 
 ## Project Overview
 
@@ -78,7 +78,7 @@ The controller uses a Job-based pattern for provisioning (per ADR-002).
 │
 ├── README.md            # User documentation
 ├── CONTRIBUTING.md      # Contribution guide
-└── CLAUDE.md            # This file
+└── GEMINI.md            # This file
 ```
 
 ## Key Components
@@ -289,12 +289,12 @@ var _ = Describe("SupabaseInstance Controller", func() {
 ## Resources
 
 - **ADR-001**: `docs/adr/001-crd-as-single-source-of-truth.md`
-- **ADR-002**: `docs/adr/002-job-based-provisioning-pattern.md`
+- **ADR-02**: `docs/adr/002-job-based-provisioning-pattern.md`
 - **Architecture**: `ARCHITECTURE.md`
 - **Controller Tests**: `server/controllers/README_TEST.md`
 
 ---
 
-**Last Updated**: November 2025
+**Last Updated**: November 25, 2025
 **Maintained By**: SupaControl Contributors
 **Questions?**: Open an issue on GitHub

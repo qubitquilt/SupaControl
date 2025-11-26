@@ -69,15 +69,38 @@ ingress:
 
 ### RBAC
 
-Review and minimize ServiceAccount permissions:
+SupaControl is designed to follow the principle of least privilege.
+
+**CRITICAL**: A security advisory **[ADVISORY-001-provisioner-rbac.md](./security/ADVISORY-001-provisioner-rbac.md)** was issued regarding overly permissive RBAC roles in early versions. The architecture has been updated to a more secure, two-tiered model. Ensure your deployment uses this model.
+
+#### Secure RBAC Model
+
+1.  **Controller `ClusterRole`**: The main SupaControl controller runs with a `ClusterRole` that is tightly scoped. It only has permissions to manage the `SupabaseInstance` CRDs and the RBAC resources for its child instances. It **cannot** access secrets or other resources inside the instance namespaces.
+
+2.  **Provisioner `Role` (Namespace-Scoped)**: For each Supabase instance, the controller creates a `Role` and `RoleBinding` that are scoped **only to that instance's namespace**. The provisioning `Job` that creates the Supabase stack uses a `ServiceAccount` bound to this limited role.
+
+This design ensures that the blast radius of a compromised provisioning job is contained to a single tenant's namespace, which is a critical security feature for a multi-tenant platform.
+
+#### Auditing RBAC
+
+Regularly audit the permissions of the SupaControl components.
 
 ```bash
-# View current permissions
-kubectl describe clusterrole supacontrol
+# 1. Audit the main controller's ClusterRole (should be limited)
+kubectl describe clusterrole supacontrol-controller-manager
 
-# Audit access
-kubectl auth can-i --list --as=system:serviceaccount:supacontrol:supacontrol
+# 2. Audit the ServiceAccount used by the controller pods
+kubectl describe serviceaccount supacontrol-controller-manager -n supacontrol-system
+
+# 3. Audit the per-instance Role for a sample instance (should be namespace-scoped)
+kubectl describe role supacontrol-provisioner -n supa-my-app
+
+# 4. Verify the provisioner ServiceAccount has no cluster-wide permissions
+# Note: The 'supacontrol-provisioner' ServiceAccount is created in each instance namespace,
+# so you must specify a namespace.
+kubectl auth can-i --list --as=system:serviceaccount:<instance-namespace>:supacontrol-provisioner
 ```
+
 
 ## Security Updates
 
@@ -95,9 +118,9 @@ Instead, email: security@qubitquilt.io (if available) or open a [private securit
 ---
 
 **Related Documentation:**
-- [Deployment Guide](../README.md#deployment)
+- [Deployment Guide](./DEPLOYMENT.md)
 - [Configuration Guide](../README.md#configuration)
-- [Troubleshooting Guide](TROUBLESHOOTING.md)
+- [Troubleshooting Guide](./TROUBLESHOOTING.md)
 - [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 **Last Updated: November 2025**

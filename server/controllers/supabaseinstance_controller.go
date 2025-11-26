@@ -9,6 +9,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,6 +149,25 @@ func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, insta
 	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Starting provisioning via Job", "projectName", instance.Spec.ProjectName)
 
+	// Create namespace first
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("supa-%s", instance.Spec.ProjectName),
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "supacontrol",
+				"supacontrol.io/instance":      instance.Spec.ProjectName,
+			},
+		},
+	}
+	if err := r.Create(ctx, namespace); err != nil && !apierrors.IsAlreadyExists(err) {
+		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create namespace: %v", err))
+	}
+
+	// Create namespace-scoped RBAC for the provisioner
+	if err := r.createProvisionerRBAC(ctx, instance); err != nil {
+		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create RBAC: %v", err))
+	}
+
 	// Create provisioning Job
 	job, err := r.createProvisioningJob(ctx, instance)
 	if err != nil {
@@ -156,7 +176,7 @@ func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, insta
 
 	// Transition to Provisioning phase
 	instance.Status.Phase = supacontrolv1alpha1.PhaseProvisioning
-	instance.Status.Namespace = fmt.Sprintf("supa-%s", instance.Spec.ProjectName)
+	instance.Status.Namespace = namespace.Name
 	instance.Status.HelmReleaseName = instance.Spec.ProjectName
 	instance.Status.ProvisioningJobName = job.Name
 	now := metav1.Now()
@@ -408,6 +428,76 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// createProvisionerRBAC creates the Role and RoleBinding for the provisioner Job
+func (r *SupabaseInstanceReconciler) createProvisionerRBAC(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+	namespace := fmt.Sprintf("supa-%s", instance.Spec.ProjectName)
+
+	// Create namespace-scoped Role
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "supacontrol-provisioner",
+			Namespace: namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "services", "configmaps", "pods", "serviceaccounts", "persistentvolumeclaims"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments", "statefulsets", "replicasets"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"ingresses"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"jobs"},
+				Verbs:     []string{"create", "delete", "get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"roles", "rolebindings"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+		},
+	}
+
+	if err := r.Create(ctx, role); err != nil && !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+
+	// Create RoleBinding
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "supacontrol-provisioner",
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "supacontrol-provisioner",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ServiceAccountName,
+				Namespace: ControllerNamespace,
+			},
+		},
+	}
+
+	if err := r.Create(ctx, roleBinding); err != nil && !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+
+	return nil
 }
 
 // cleanupViaJob performs cleanup using a Kubernetes Job
