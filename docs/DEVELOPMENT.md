@@ -14,7 +14,7 @@ This guide covers local development setup, project structure, and development wo
 
 ## Prerequisites for Development
 
-- **Go** 1.21+
+- **Go** 1.24+
 - **Node.js** 18+
 - **PostgreSQL** 14+
 - **Docker** (optional, for containerized PostgreSQL)
@@ -60,6 +60,11 @@ This guide covers local development setup, project structure, and development wo
 │   └── /workflows
 │       └── ci.yml       # CI pipeline
 │
+├── /docs/               # Detailed documentation
+│   ├── /adr             # Architecture Decision Records
+│   ├── API.md
+│   ├── ARCHITECTURE.md
+│   └── ...
 ├── README.md            # This file
 ├── CONTRIBUTING.md      # Contribution guidelines
 ├── TESTING.md           # Testing documentation
@@ -122,28 +127,30 @@ kubectl get nodes
 ```bash
 # Point to your custom config
 export KUBECONFIG=/path/to/your/kubeconfig.yaml
-
-# Or merge multiple configs
-export KUBECONFIG=$HOME/.kube/config:$HOME/.kube/config-dev
 ```
 
-**For in-cluster development:**
-- If running SupaControl inside a Kubernetes pod, KUBECONFIG is not needed
-- The application will automatically use in-cluster service account credentials
-- See [DEPLOYMENT.md](DEPLOYMENT.md) for production deployment patterns
-
 **Troubleshooting:**
-- If you see "unable to connect to Kubernetes" errors, check your KUBECONFIG
-- Verify your cluster is accessible: `kubectl get nodes`
-- Ensure proper RBAC permissions (see [charts/supacontrol/templates/rbac.yaml](../charts/supacontrol/templates/rbac.yaml))
+- If you see "unable to connect to Kubernetes" errors, check your `KUBECONFIG`.
+- Verify your cluster is accessible: `kubectl get nodes`.
+- Ensure the controller has the necessary RBAC permissions to create resources.
+
+### Security Considerations (RBAC)
+
+**IMPORTANT**: The project has a critical security advisory regarding RBAC permissions. Read **[ADVISORY-001-provisioner-rbac.md](./security/ADVISORY-001-provisioner-rbac.md)**.
+
+The correct, secure architecture uses a **two-tiered RBAC model**:
+
+1.  **Controller `ClusterRole`**: The main controller has a `ClusterRole` with limited permissions to manage namespaces and the RBAC roles for each instance.
+2.  **Provisioner `Role` (Namespace-Scoped)**: For each instance, the controller creates a `Role` and `RoleBinding` that is scoped **only to that instance's namespace**. The provisioning `Job` uses these scoped permissions.
+
+When developing, ensure your changes adhere to this model to maintain security and isolation between tenants. The controller should be responsible for creating the namespace-scoped RBAC, and the provisioning jobs should operate with those limited permissions.
 
 **Backend Code Guidelines:**
-- Follow [Effective Go](https://golang.org/doc/effective_go.html) conventions
-- Use `gofmt` for formatting
-- Run `go vet` before committing
-- Add tests for new features
-- Handle errors explicitly
-- Add comments for exported functions
+- Follow [Effective Go](https://golang.org/doc/effective_go.html) conventions.
+- Use `gofmt` for formatting and `go vet` for analysis.
+- Add tests for all new features, especially for controller logic.
+- Handle errors explicitly and add context.
+- Add comments for exported functions and complex logic.
 
 ## Frontend Development
 
@@ -386,30 +393,7 @@ pre-commit install
 - Keep components focused and reusable
 - Test user interactions
 
-## Code Style (Legacy)
 
-**Go:**
-```bash
-# Format code
-gofmt -w .
-
-# Lint code
-go vet ./...
-
-# Run with golangci-lint (recommended)
-golangci-lint run
-```
-
-**JavaScript/React:**
-```bash
-cd ui
-
-# Lint code
-npm run lint
-
-# Fix auto-fixable issues
-npm run lint -- --fix
-```
 
 ## Local Testing
 
@@ -478,19 +462,16 @@ open coverage/index.html
 
 ### Test Coverage
 
-**Current Status (November 2024):**
-- Backend: 6.3% coverage (goal: 70%+)
-- Frontend: 5.87% coverage (goal: 70%+)
-- Critical paths need improvement
+Maintaining high test coverage is crucial for project stability and quality. We aim for a high level of coverage across all components.
 
 **Priority areas for testing:**
 1. API handlers
 2. Database operations
-3. Kubernetes orchestration
-4. React components
-5. Authentication flows
+3. Kubernetes controller logic
+4. React components and user flows
+5. Authentication and authorization logic
 
-See [TESTING.md](../TESTING.md) for comprehensive testing documentation.
+For detailed information on running tests and our testing strategy, see the [**Comprehensive Testing Guide**](../TESTING.md).
 
 ### Writing Tests
 
@@ -544,6 +525,7 @@ test('creates instance on form submit', async () => {
 - [Testing Guide](../TESTING.md)
 - [Contributing Guide](../CONTRIBUTING.md)
 - [Architecture Documentation](../ARCHITECTURE.md)
+- [Architecture Decision Records](../docs/adr) - Key architectural decisions and their rationale.
 - [CLAUDE.md](../CLAUDE.md) - AI assistant development guide
 
 **Last Updated: November 2025**

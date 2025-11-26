@@ -114,7 +114,7 @@ func createTestReconciler() *SupabaseInstanceReconciler {
 	return &SupabaseInstanceReconciler{
 		Client:               k8sClient,
 		Scheme:               scheme.Scheme,
-		ChartRepo:            "https://supabase-community.github.io/supabase-kubernetes",
+		ChartRepo:            "https://supabase.github.io/helm-charts",
 		ChartName:            "supabase",
 		ChartVersion:         "0.1.0",
 		DefaultIngressClass:  "nginx",
@@ -218,12 +218,12 @@ func reconcileToProvisioning(ctx context.Context, t *testing.T, reconciler *Supa
 }
 
 // Helper function to simulate Job success
-func setJobSucceeded(ctx context.Context, t *testing.T, jobName string) {
+func setJobSucceeded(ctx context.Context, t *testing.T, namespace, jobName string) {
 	t.Helper()
 	job := &batchv1.Job{}
 	err := k8sClient.Get(ctx, types.NamespacedName{
 		Name:      jobName,
-		Namespace: ControllerNamespace,
+		Namespace: namespace,
 	}, job)
 	if err != nil {
 		t.Fatalf("Failed to get Job: %v", err)

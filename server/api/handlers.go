@@ -623,22 +623,19 @@ func (h *Handler) convertCRToAPIType(c echo.Context, cr *supacontrolv1alpha1.Sup
 	var status apitypes.InstanceStatus
 	switch cr.Status.Phase {
 	case supacontrolv1alpha1.PhasePending:
-		status = apitypes.StatusProvisioning
-	case supacontrolv1alpha1.PhaseProvisioning:
+		status = apitypes.StatusPending
+	case supacontrolv1alpha1.PhaseProvisioning, supacontrolv1alpha1.PhaseProvisioningInProgress:
 		status = apitypes.StatusProvisioning
 	case supacontrolv1alpha1.PhaseRunning:
 		status = apitypes.StatusRunning
-	case supacontrolv1alpha1.PhaseDeleting:
+	case supacontrolv1alpha1.PhaseDeleting, supacontrolv1alpha1.PhaseDeletingInProgress:
 		status = apitypes.StatusDeleting
 	case supacontrolv1alpha1.PhaseFailed:
 		status = apitypes.StatusFailed
 	default:
-		// Unknown phase - log warning and default to Provisioning
-		GetLogger(c).Warn("Unknown SupabaseInstance phase encountered",
-			"projectName", cr.Spec.ProjectName,
-			"phase", cr.Status.Phase,
-			"defaulting_to", apitypes.StatusProvisioning)
-		status = apitypes.StatusProvisioning
+		// An empty phase means it was just created and is waiting for the controller.
+		// This is the 'Pending' state.
+		status = apitypes.StatusPending
 	}
 
 	instance := &apitypes.Instance{

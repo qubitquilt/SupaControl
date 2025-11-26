@@ -9,6 +9,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,6 +149,25 @@ func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, insta
 	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Starting provisioning via Job", "projectName", instance.Spec.ProjectName)
 
+	// Create namespace first
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("supa-%s", instance.Spec.ProjectName),
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "supacontrol",
+				"supacontrol.io/instance":      instance.Spec.ProjectName,
+			},
+		},
+	}
+	if err := r.Create(ctx, namespace); err != nil && !apierrors.IsAlreadyExists(err) {
+		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create namespace: %v", err))
+	}
+
+	// Create namespace-scoped RBAC for the provisioner
+	if err := r.createProvisionerRBAC(ctx, instance); err != nil {
+		return r.transitionToFailed(ctx, instance, fmt.Sprintf("Failed to create RBAC: %v", err))
+	}
+
 	// Create provisioning Job
 	job, err := r.createProvisioningJob(ctx, instance)
 	if err != nil {
@@ -156,7 +176,7 @@ func (r *SupabaseInstanceReconciler) reconcilePending(ctx context.Context, insta
 
 	// Transition to Provisioning phase
 	instance.Status.Phase = supacontrolv1alpha1.PhaseProvisioning
-	instance.Status.Namespace = fmt.Sprintf("supa-%s", instance.Spec.ProjectName)
+	instance.Status.Namespace = namespace.Name
 	instance.Status.HelmReleaseName = instance.Spec.ProjectName
 	instance.Status.ProvisioningJobName = job.Name
 	now := metav1.Now()
@@ -201,7 +221,7 @@ func (r *SupabaseInstanceReconciler) reconcileProvisioning(ctx context.Context, 
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	job, err := r.getJobStatus(ctx, jobName)
+	job, err := r.getJobStatus(ctx, instance.Status.Namespace, jobName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Error(err, "Provisioning Job not found", "jobName", jobName)
@@ -260,7 +280,7 @@ func (r *SupabaseInstanceReconciler) reconcileProvisioningInProgress(ctx context
 	logger := ctrl.LoggerFrom(ctx)
 
 	jobName := instance.Status.ProvisioningJobName
-	job, err := r.getJobStatus(ctx, jobName)
+	job, err := r.getJobStatus(ctx, instance.Status.Namespace, jobName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Error(err, "Provisioning Job not found", "jobName", jobName)
@@ -410,6 +430,86 @@ func (r *SupabaseInstanceReconciler) reconcileDelete(ctx context.Context, instan
 	return ctrl.Result{}, nil
 }
 
+// createProvisionerRBAC creates the ServiceAccount, Role and RoleBinding for the provisioner Job
+// inside the instance's own namespace for better isolation.
+func (r *SupabaseInstanceReconciler) createProvisionerRBAC(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
+	namespace := fmt.Sprintf("supa-%s", instance.Spec.ProjectName)
+
+	// 1. Create ServiceAccount in the instance namespace
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ServiceAccountName,
+			Namespace: namespace,
+		},
+	}
+	if err := r.Create(ctx, sa); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create provisioner service account: %w", err)
+	}
+
+	// 2. Create namespace-scoped Role
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "supacontrol-provisioner",
+			Namespace: namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "services", "configmaps", "pods", "serviceaccounts", "persistentvolumeclaims"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments", "statefulsets", "replicasets"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"ingresses"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"jobs"},
+				Verbs:     []string{"create", "delete", "get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"roles", "rolebindings"},
+				Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+			},
+		},
+	}
+	if err := r.Create(ctx, role); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create provisioner role: %w", err)
+	}
+
+	// 3. Create RoleBinding in the instance namespace
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "supacontrol-provisioner",
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "supacontrol-provisioner",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ServiceAccountName,
+				Namespace: namespace, // Subject is now in the instance namespace
+			},
+		},
+	}
+	if err := r.Create(ctx, roleBinding); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create provisioner role binding: %w", err)
+	}
+
+	return nil
+}
+
 // cleanupViaJob performs cleanup using a Kubernetes Job
 func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance *supacontrolv1alpha1.SupabaseInstance) error {
 	logger := ctrl.LoggerFrom(ctx)
@@ -435,10 +535,11 @@ func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance
 	}
 
 	// Get Job status
-	job, err := r.getJobStatus(ctx, jobName)
+	job, err := r.getJobStatus(ctx, instance.Status.Namespace, jobName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("Cleanup Job not found, assuming cleanup complete", "jobName", jobName)
+			// If job is not found, we can proceed with namespace deletion
 			return nil
 		}
 		return err
@@ -448,6 +549,13 @@ func (r *SupabaseInstanceReconciler) cleanupViaJob(ctx context.Context, instance
 	if isJobSucceeded(job) {
 		logger.Info("Cleanup Job succeeded", "jobName", jobName)
 		metrics.JobStatusTotal.WithLabelValues("cleanup", "succeeded").Inc()
+
+		// Delete namespace after successful cleanup
+		namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: instance.Status.Namespace}}
+		if err := r.Delete(ctx, namespace); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete namespace after cleanup: %w", err)
+		}
+		logger.Info("Deleted instance namespace", "namespace", instance.Status.Namespace)
 		return nil
 	}
 

@@ -29,34 +29,20 @@ The installer will check for these requirements:
 
 ## Installation
 
-### From Source
+Currently, the only supported method for running the interactive installer is by cloning the repository and running it from the source code.
+
+### From Source (Recommended)
 
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/qubitquilt/SupaControl.git
 cd SupaControl/cli
 
-# Install dependencies
+# 2. Install dependencies
 npm install
 
-# Run the installer
+# 3. Run the installer
 npm start
-```
-
-### As Global Package
-
-```bash
-# Install globally
-npm install -g supacontrol-installer
-
-# Run the installer
-supacontrol-install
-```
-
-### Using npx
-
-```bash
-npx supacontrol-installer
 ```
 
 ## Usage
@@ -87,7 +73,7 @@ npm start
 
 ### Kubernetes Settings
 
-- **Namespace**: Kubernetes namespace for SupaControl (default: `supacontrol`)
+- **Namespace**: Kubernetes namespace for SupaControl (default: `supacontrol-system`)
 - **Release Name**: Helm release name (default: `supacontrol`)
 
 ### Network Settings
@@ -125,7 +111,7 @@ The installer creates:
 
 ## Full supactl CLI
 
-The interactive installer deploys the SupaControl server. For ongoing management of Supabase instances, install the full supactl CLI tool from the external repository: [https://github.com/qubitquilt/supactl](https://github.com/qubitquilt/supactl).
+**IMPORTANT NOTE:** The interactive installer in this directory (`cli/`) is only for deploying the SupaControl server. For all other operations, such as managing Supabase instances (login, create, list, status, delete), you must use the full `supactl` CLI tool, which is available in a separate repository.
 
 ### Installation
 
@@ -231,7 +217,7 @@ kubectl get nodes
 
 **Solution**:
 ```bash
-helm repo add supabase-community https://supabase-community.github.io/supabase-kubernetes
+helm repo add supabase https://supabase.github.io/helm-charts
 helm repo update
 ```
 
@@ -240,13 +226,13 @@ helm repo update
 **Problem**: Helm installation errors
 
 **Solution**:
-1. Check Helm logs: `helm list -n supacontrol`
-2. View pod logs: `kubectl logs -n supacontrol -l app.kubernetes.io/name=supacontrol`
-3. Verify resources: `kubectl get all -n supacontrol`
+1. Check Helm logs: `helm list -n supacontrol-system`
+2. View pod logs: `kubectl logs -n supacontrol-system -l app.kubernetes.io/name=supacontrol`
+3. Verify resources: `kubectl get all -n supacontrol-system`
 4. Delete and retry:
    ```bash
-   helm uninstall supacontrol -n supacontrol
-   kubectl delete namespace supacontrol
+   helm uninstall supacontrol -n supacontrol-system
+   kubectl delete namespace supacontrol-system
    # Run installer again
    ```
 

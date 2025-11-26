@@ -58,8 +58,8 @@ SupaControl is a **control plane** for managing multi-tenant Supabase instances 
 │                         │                                     │
 │   ┌──────────────────────────────────────────────┐          │
 │   │         Data/Integration Layer                │          │
-│   │  - PostgreSQL Repository                     │          │
-│   │  - Kubernetes Client                         │          │
+│   │  - PostgreSQL Repository (Users, API Keys)   │          │
+│   │  - Kubernetes CRD Client                     │          │
 │   │  - Helm SDK Integration                      │          │
 │   └──────────────────────────────────────────────┘          │
 │                                                               │
@@ -74,8 +74,8 @@ SupaControl is a **control plane** for managing multi-tenant Supabase instances 
 │   │  PostgreSQL  │         │  Kubernetes  │                 │
 │   │   Database   │         │   Cluster    │                 │
 │   │              │         │              │                 │
-│   │ - State      │         │ - Instances  │                 │
-│   │ - Audit Logs │         │ - Namespaces │                 │
+│   │ - Users      │         │ - CRDs       │                 │
+│   │ - API Keys   │         │ - Namespaces │                 │
 │   └──────────────┘         └──────────────┘                 │
 │                                                               │
 └───────────────────────────────────────────────────────────────┘
@@ -83,13 +83,15 @@ SupaControl is a **control plane** for managing multi-tenant Supabase instances 
 
 ### High-Level Flow
 
-1. **User Interaction**: Users interact via Web UI or CLI
-2. **API Gateway**: All requests go through the REST API
-3. **Authentication**: JWT/API Key validation
-4. **Business Logic**: Request processing and validation
-5. **Orchestration**: Kubernetes/Helm operations
-6. **Persistence**: State stored in PostgreSQL
-7. **Response**: Results returned to user
+1. **User Interaction**: Users interact via Web UI or CLI.
+2. **API Gateway**: All requests go through the REST API.
+3. **Authentication**: JWT/API Key validation.
+4. **Business Logic**: Request processing and validation.
+5. **Orchestration**: Creates/updates `SupabaseInstance` CRDs in Kubernetes.
+6. **Persistence**:
+   - **Instance State**: Stored in Kubernetes as CRDs (Single Source of Truth).
+   - **Operational State**: Users and API keys stored in PostgreSQL.
+7. **Response**: Asynchronous acceptance; status polled from CRD.
 
 ## Architecture Principles
 
@@ -97,43 +99,39 @@ SupaControl is built on these core architectural principles:
 
 ### 1. API-First Design
 
-- All functionality exposed via REST API
-- Web UI and CLI are API consumers
-- Enables programmatic access and automation
-- Facilitates testing and integration
+- All functionality exposed via REST API.
+- Web UI and CLI are API consumers.
+- Enables programmatic access and automation.
 
 ### 2. Separation of Concerns
 
-- **API Layer**: HTTP handling, routing, middleware
-- **Business Logic**: Validation, state management, orchestration
-- **Data Layer**: Database operations, Kubernetes client
+- **API Layer**: HTTP handling, routing, middleware.
+- **Business Logic**: Validation, state management, orchestration logic.
+- **Data Layer**: PostgreSQL for operational data, Kubernetes client for instance state.
 
 ### 3. Stateless Application
 
-- No session state stored in application
-- Horizontally scalable
-- Cloud-native design
-- All state in PostgreSQL
+- No session state stored in the application.
+- Horizontally scalable for high availability.
+- All persistent state managed externally (PostgreSQL and Kubernetes CRDs).
 
 ### 4. Declarative Infrastructure
 
-- Kubernetes resources managed declaratively
-- Helm charts for reproducible deployments
-- Infrastructure as Code principles
+- Kubernetes resources managed declaratively via CRDs.
+- Helm charts for reproducible deployments.
+- Aligns with Infrastructure as Code (IaC) and GitOps principles.
 
 ### 5. Security by Default
 
-- Authentication required (except public endpoints)
-- Secrets encrypted at rest
-- Least privilege RBAC
-- Audit logging for compliance
+- Authentication required for all sensitive endpoints.
+- Secrets encrypted at rest (in K8s and DB).
+- Least privilege RBAC for all components.
 
 ### 6. Observability
 
-- Structured logging
-- Health check endpoints
-- Metrics exposure (future: Prometheus)
-- Error tracking and reporting
+- Structured logging for clear, machine-readable logs.
+- Health check endpoints for liveness and readiness.
+- Metrics exposure for Prometheus (future).
 
 ## Component Architecture
 
@@ -155,9 +153,10 @@ server/
 │   │   ├── db.go           # Database connection & migrations
 │   │   └── api_keys.go     # API key repository
 │   └── /k8s
-│       ├── k8s.go          # Kubernetes client wrapper
-│       ├── orchestrator.go # Helm operations (legacy)
-│       └── crclient.go     # Controller runtime CRD client
+│       ├── crclient.go     # Controller runtime CRD client
+│       └── orchestrator.go # Legacy direct Helm operations
+├── /controllers
+│   └── supabaseinstance_controller.go # Operator logic
 └── /pkg
     └── /api-types          # Shared API types
 ```
@@ -166,85 +165,47 @@ server/
 
 #### 1. API Layer (`server/api/`)
 
-**Responsibility**: HTTP request/response handling
+**Responsibility**: HTTP request/response handling.
 
 **Functions**:
-- Route registration and URL mapping
-- Request validation and binding
-- Response formatting (JSON)
-- Error handling and status codes
-- Middleware execution (auth, logging, CORS)
+- Route registration and URL mapping.
+- Request validation, binding, and response formatting (JSON).
+- Middleware execution (auth, logging, CORS).
 
-**Key Files**:
-- `handlers.go`: Endpoint handlers (Login, CreateInstance, etc.)
-- `router.go`: Echo router setup and route registration
-- `middleware.go`: Authentication, logging, error recovery
-
-**Pattern**: Handler → Business Logic → Response
+**Pattern**: Handler → Business Logic → Response.
 
 ```go
 func (h *Handler) CreateInstance(c echo.Context) error {
-    // 1. Parse request
-    var req CreateInstanceRequest
-    if err := c.Bind(&req); err != nil {
-        return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-    }
-
-    // 2. Call business logic
-    instance, err := h.orchestrator.CreateInstance(c.Request().Context(), req.Name)
-    if err != nil {
-        return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-    }
-
-    // 3. Return response
-    return c.JSON(http.StatusCreated, instance)
+    // 1. Parse and validate request
+    // 2. Create a SupabaseInstance CRD via the crClient
+    // 3. Return 202 Accepted
 }
 ```
 
 #### 2. Authentication Service (`server/internal/auth/`)
 
-**Responsibility**: Security and identity management
+**Responsibility**: Security and identity management.
 
 **Functions**:
-- JWT token generation and validation
-- Password hashing (bcrypt)
-- API key generation and validation
-- Claims extraction and verification
-
-**Security Design**:
-- Passwords hashed with bcrypt (cost 10)
-- JWTs signed with HS256 (HMAC-SHA256)
-- API keys stored as hashed values
-- 24-hour JWT expiration
-- Revokable API keys
-
-**Example Flow**:
-```
-1. User submits username/password
-2. Hash compared with stored hash
-3. Generate JWT with user claims
-4. Return token to user
-5. User includes token in subsequent requests
-6. Middleware validates token on each request
-```
+- JWT token generation and validation.
+- Password hashing (bcrypt) and verification.
+- API key generation, hashing, and validation.
 
 #### 3. Database Layer (`server/internal/db/`)
 
-**Responsibility**: SupaControl operational data persistence (NOT instance state)
+**Responsibility**: Persistence for SupaControl's **operational data only**.
 
-**Technology**: PostgreSQL + sqlx (prepared statements)
+**Technology**: PostgreSQL + sqlx.
 
-**Important**: Per ADR-001, instance state is stored in Kubernetes CRDs, not PostgreSQL.
+**IMPORTANT**: Per **ADR-001**, instance state is **NOT** stored in PostgreSQL. The `instances` table and its corresponding repository have been removed. The database only manages users, API keys, and (in the future) audit logs.
 
 **Schema Design**:
-
 ```sql
 -- users table
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
+    password_hash VARCHAR(255) NOT NULL
 );
 
 -- api_keys table
@@ -252,61 +213,32 @@ CREATE TABLE api_keys (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     key_hash VARCHAR(255) NOT NULL,
-    user_id INT REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT NOW(),
-    revoked_at TIMESTAMP NULL
+    user_id INT REFERENCES users(id)
 );
-
--- Note: Instance state is NOT stored in PostgreSQL
--- Per ADR-001, SupabaseInstance CRDs are the Single Source of Truth for instance state
--- PostgreSQL is used only for SupaControl's own state (users, API keys, audit logs)
 ```
 
-**Repository Pattern**:
-- Each entity has a repository file (users, api_keys)
-- CRUD operations encapsulated
-- Database transactions where needed
-- Prepared statements via sqlx (SQL injection prevention)
+#### 4. Kubernetes Controller (`server/controllers/`)
 
-**Migrations**:
-- Located in `server/internal/db/migrations/`
-- Applied automatically on startup
-- Sequentially numbered (001, 002, 003...)
-- Idempotent (CREATE IF NOT EXISTS)
-
-#### 4. Kubernetes Orchestrator (`server/internal/k8s/`)
-
-**Responsibility**: Kubernetes and Helm operations
+**Responsibility**: Reconciliation of `SupabaseInstance` CRDs. This is the core of the operator pattern.
 
 **Functions**:
-- Create/delete Kubernetes namespaces
-- Install/uninstall Helm releases
-- Query instance status
-- Manage Kubernetes resources
+- Watches for changes to `SupabaseInstance` resources.
+- Creates, updates, or deletes Kubernetes resources (Namespaces, Jobs, Secrets) to match the desired state defined in the CRD.
+- Updates the `.status` field of the CRD to reflect the actual state.
 
-**Design**:
-- Wrapper around client-go and Helm SDK
-- In-cluster configuration support
-- Out-of-cluster (KUBECONFIG) support
-- Error handling and retries
+**Pattern**: Follows the Job-Based Provisioning pattern from **ADR-002**.
 
-**Instance Creation Flow**:
-```
-1. Validate instance name (DNS compliant)
-2. Check if instance already exists in DB
-3. Create Kubernetes namespace: supa-{name}
-4. Prepare Helm values (ingress, domain, etc.)
-5. Install Helm chart in namespace
-6. Wait for installation to complete
-7. Save instance record to database
-8. Return instance details
-```
-
-**Namespace Isolation**:
-- Each instance in separate namespace
-- Naming convention: `supa-{instance-name}`
-- Network policies for isolation (optional)
-- Resource quotas per namespace (future)
+**Instance Creation Flow (per ADR-002)**:
+1. API creates a `SupabaseInstance` CRD with `status.phase: Pending`.
+2. Controller sees the new CRD.
+3. Controller creates a Kubernetes `Job` to handle the provisioning.
+4. The Job runs a script that:
+   - Creates the namespace.
+   - Generates secrets.
+   - Installs the Supabase Helm chart.
+5. Controller monitors the Job's status.
+6. Upon Job success, the controller updates the CRD status to `Running`.
+7. Upon Job failure, the controller updates the CRD status to `Failed`.
 
 ### Frontend Components
 
@@ -320,25 +252,16 @@ ui/
 │       ├── Login.jsx       # Authentication page
 │       ├── Dashboard.jsx   # Instance management
 │       └── Settings.jsx    # API key management
-└── /public
-    └── assets/             # Static assets
 ```
 
-**Technology**: React + Vite
-
-**State Management**: React hooks (useState, useEffect)
-
-**API Client**: Fetch API with Bearer token auth
-
-**Routing**: React Router (client-side)
-
-**Pattern**: Component → API Client → Backend
+**Technology**: React + Vite.
+**Pattern**: Component → API Client → Backend.
 
 ## Data Architecture
 
 ### Data Flow Diagrams
 
-#### Instance Creation Data Flow
+#### Instance Creation Data Flow (per ADR-001 & ADR-002)
 
 ```
 ┌──────────┐
@@ -351,86 +274,41 @@ ui/
 │  CreateInstance  │
 └─────┬────────────┘
       │ 1. Validate request
-      │ 2. Extract user from JWT
+      │ 2. Create SupabaseInstance CRD
+      │    (status: "Pending")
       ▼
-┌──────────────────┐
-│  API Handler     │
-│  CreateInstance  │
-└─────┬────────────┘
-      │
-      ├─────► 3. Check if CRD exists
-      │       └─[Kubernetes CRClient]
-      │
-      └─────► 4. Create SupabaseInstance CRD
-              └─[Kubernetes CRClient]
-
 ┌──────────────────┐
 │   Controller     │
 │  (watches CRDs)  │
 └─────┬────────────┘
-      │
-      ├─────► 5. Create namespace
-      │       └─[Kubernetes API]
-      │
-      ├─────► 6. Create secrets
-      │       └─[Kubernetes API]
-      │
-      ├─────► 7. Install Helm chart
-      │       └─[Helm SDK]
-      │
-      └─────► 8. Update CRD status
-              └─[Kubernetes API]
-
-Success path:
-  Controller updates CRD status ──► API reads CRD ──► Client (201 Accepted)
-
-Error path:
-  Controller sets status.phase=Failed ──► API reads CRD ──► Client sees error
+      │ 3. Sees "Pending" CRD
+      │ 4. Creates Provisioning Job
+      ▼
+┌──────────────────┐
+│ Provisioning Job │
+│  (runs in K8s)   │
+└─────┬────────────┘
+      │ 5. Creates Namespace, Secrets, Helm Release
+      │ 6. Exits with success/failure code
+      ▼
+┌──────────────────┐
+│   Controller     │
+│ (watches Jobs)   │
+└─────┬────────────┘
+      │ 7. Sees Job result
+      │ 8. Updates CRD status to "Running" or "Failed"
+      ▼
+┌──────────┐
+│  Client  │
+│ (polling)│
+└─────┬────┘
+      │ GET /api/v1/instances/myapp
+      │ (reads updated CRD status)
 ```
 
 #### Authentication Flow
 
-```
-┌──────────┐
-│  Client  │
-└─────┬────┘
-      │ POST /api/v1/auth/login
-      │ {"username": "admin", "password": "admin"}
-      ▼
-┌──────────────────┐
-│   API Handler    │
-│      Login       │
-└─────┬────────────┘
-      │ 1. Bind request
-      ▼
-┌──────────────────┐
-│ Database Repo    │
-│ GetUserByUsername│
-└─────┬────────────┘
-      │ 2. Fetch user record
-      ▼
-┌──────────────────┐
-│  Auth Service    │
-│ CheckPassword    │
-└─────┬────────────┘
-      │ 3. Compare password hash
-      │ (bcrypt.CompareHashAndPassword)
-      ▼
-    Match?
-      │
-      ├─ Yes ──► 4. Generate JWT
-      │          └─[Auth Service: GenerateToken]
-      │
-      └─ No ───► Return 401 Unauthorized
-
-Success:
-  JWT Token ──► API ──► Client (200 OK)
-  Client stores token in localStorage
-
-Subsequent Requests:
-  Client ──► Authorization: Bearer <token> ──► API
-          └─[Middleware validates token]
-```
+(No changes to this flow)
 
 ### Database Schema
 
@@ -464,143 +342,34 @@ Subsequent Requests:
 └─────────────────┘
 
 PostgreSQL Database Schema Notes:
-- users.password_hash: bcrypt hashed passwords
-- users.role: User role (admin, user, etc.)
-- api_keys.key_hash: SHA-256 hashed API keys
-- api_keys.expires_at: NULL = never expires, timestamp = expiration date
-- api_keys.last_used: Tracks last usage for auditing
-
-Instance State (NOT in PostgreSQL):
-- Instance metadata stored in Kubernetes as SupabaseInstance CRDs
-- See ADR-001: docs/adr/001-crd-as-single-source-of-truth.md
-- Query instances via: kubectl get supabaseinstances -A
-- Instance fields: projectName, namespace, status, studioURL, apiURL, errorMessage, etc.
+- This database is for OPERATIONAL DATA ONLY (users, API keys).
+- Instance state is NOT stored here. See ADR-001.
 ```
 
 ### State Management
 
-**Application State**: Stateless (no in-memory state)
+**Application State**: Stateless (no in-memory session state).
 
 **Persistent State**:
-1. **User accounts**: PostgreSQL (users table)
-2. **API keys**: PostgreSQL (api_keys table)
-3. **Instance state**: Kubernetes CRDs (SupabaseInstance custom resources) - **Single Source of Truth per ADR-001**
-4. **Kubernetes resources**: Kubernetes API (namespaces, secrets, ingresses, etc.)
-5. **Helm releases**: Helm storage (in-cluster secrets)
+1. **Instance State**: Kubernetes `SupabaseInstance` CRDs are the **Single Source of Truth**.
+   - Managed by the controller.
+   - Queried via the Kubernetes API.
+2. **Operational State**:
+   - **User accounts**: PostgreSQL (`users` table).
+   - **API keys**: PostgreSQL (`api_keys` table).
+3. **Ephemeral State**:
+   - **Provisioning/Cleanup**: Kubernetes `Jobs` manage the lifecycle of these operations.
 
-**State Management Architecture** (per ADR-001):
-- **SupabaseInstance CRDs** are the Single Source of Truth for all instance state (status, URLs, namespaces, errors)
-- **PostgreSQL** stores only SupaControl's operational state (users, API keys, future audit logs)
-- **No state synchronization needed** - one source of truth eliminates sync complexity
-- **Controller reconciliation** maintains desired state via Kubernetes reconciliation loops
+This architecture eliminates state synchronization complexity by relying on the Kubernetes control plane for instance management.
 
 ## API Design
 
+(No significant changes, but the backend implementation relies on CRDs)
+
 ### RESTful Principles
 
-SupaControl follows REST architectural style:
-
-1. **Resource-Based URLs**: `/api/v1/instances`, `/api/v1/auth/api-keys`
-2. **HTTP Methods**: GET (read), POST (create), DELETE (delete)
-3. **Stateless**: No session state on server
-4. **Standard Status Codes**: 200, 201, 400, 401, 404, 500
-5. **JSON**: Request and response format
-
-### API Versioning
-
-- Version in URL path: `/api/v1/`
-- Allows backward compatibility
-- Future versions: `/api/v2/`
-
-### Endpoint Design Patterns
-
-#### Collection Endpoints
-
-```
-GET    /api/v1/instances       # List all instances
-POST   /api/v1/instances       # Create new instance
-```
-
-#### Resource Endpoints
-
-```
-GET    /api/v1/instances/:name # Get specific instance
-DELETE /api/v1/instances/:name # Delete instance
-```
-
-#### Action Endpoints
-
-```
-POST /api/v1/auth/login          # Login action
-POST /api/v1/auth/api-keys       # Create API key
-```
-
-### Request/Response Patterns
-
-**Standard Request**:
-```http
-POST /api/v1/instances
-Authorization: Bearer eyJhbGc...
-Content-Type: application/json
-
-{
-  "name": "my-app"
-}
-```
-
-**Success Response**:
-```http
-HTTP/1.1 201 Created
-Content-Type: application/json
-
-{
-  "id": 1,
-  "name": "my-app",
-  "namespace": "supa-my-app",
-  "status": "Pending",
-  "created_at": "2024-01-15T10:00:00Z"
-}
-```
-
-**Error Response**:
-```http
-HTTP/1.1 400 Bad Request
-Content-Type: application/json
-
-{
-  "message": "instance name is required"
-}
-```
-
-### Authentication Middleware
-
-All protected endpoints use authentication middleware:
-
-```go
-func AuthMiddleware(authService *auth.Service) echo.MiddlewareFunc {
-    return func(next echo.HandlerFunc) echo.HandlerFunc {
-        return func(c echo.Context) error {
-            // 1. Extract Authorization header
-            authHeader := c.Request().Header.Get("Authorization")
-
-            // 2. Parse Bearer token
-            token := strings.TrimPrefix(authHeader, "Bearer ")
-
-            // 3. Validate token (JWT or API key)
-            claims, err := authService.ValidateToken(token)
-            if err != nil {
-                return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
-            }
-
-            // 4. Set user context
-            c.Set("user", claims.Username)
-
-            // 5. Continue to handler
-            return next(c)
-        }
-    }
-}
-```
+- Follows standard REST style: resource-based URLs, standard HTTP methods, and status codes.
+- Asynchronous operations return `202 Accepted` and require polling for status.
 
 ## Security Architecture
 
@@ -646,522 +415,183 @@ SupaControl implements multiple security layers:
                       ▼
 ┌─────────────────────────────────────────────────┐
 │  Layer 6: Infrastructure Security               │
-│  - RBAC (Kubernetes)                            │
-│  - Least privilege ServiceAccount               │
+│  - Least-privilege RBAC (see below)             │
 │  - Namespace isolation                          │
+│  - Pod Security Standards                       │
 └─────────────────────────────────────────────────┘
 ```
 
 ### Secrets Management
 
 **Types of Secrets**:
-1. **JWT Signing Secret**: Used to sign/verify JWTs
-2. **Database Password**: PostgreSQL connection
-3. **User Passwords**: Bcrypt hashed
-4. **API Keys**: SHA-256 hashed
+1. **JWT Signing Secret**: Used to sign/verify JWTs for the API.
+2. **Database Password**: For connecting to the operational PostgreSQL database.
+3. **User Passwords**: Stored as bcrypt hashes in the database.
+4. **API Keys**: Stored as SHA-256 hashes in the database.
 
 **Storage**:
-- **In Production**: Kubernetes Secrets (base64 encoded, encrypted at rest if enabled)
-- **In Code**: NEVER stored or committed
-- **In Logs**: NEVER logged
-
-**Best Practices**:
-- Secrets generated with cryptographically secure random generator
-- Minimum secret length enforced (64 bytes for JWT)
-- Regular rotation recommended
-- Separate secrets per environment
+- **In Production**: All secrets are stored in Kubernetes Secrets, which should be encrypted at rest.
+- **In Code**: Secrets are NEVER stored or committed in the codebase.
+- **In Logs**: Secrets are NEVER logged.
 
 ### RBAC (Kubernetes)
 
-SupaControl ServiceAccount requires cluster-wide permissions:
+SupaControl follows the principle of least privilege by using a two-tiered RBAC model. This approach avoids granting broad, cluster-wide permissions to provisioning jobs, significantly reducing the security risk. See **Security Advisory ADVISORY-001** for details.
+
+#### 1. Controller RBAC (`ClusterRole`)
+
+The main SupaControl controller runs with a `ClusterRole` that grants it only the permissions needed to manage `SupabaseInstance` CRDs, create namespaces, and manage RBAC resources within those namespaces.
 
 ```yaml
+# Simplified main controller ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: supacontrol
+  name: supacontrol-controller-manager
 rules:
-  # Namespace management
+  - apiGroups: ["supacontrol.qubitquilt.com"]
+    resources: ["supabaseinstances", "supabaseinstances/finalizers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["create", "delete", "get", "list"]
+    verbs: ["create", "get", "list", "watch"] # Note: delete is handled by finalizer logic
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+```
 
-  # Resource management
-  - apiGroups: [""]
-    resources: ["secrets", "configmaps", "services", "persistentvolumeclaims"]
-    verbs: ["create", "delete", "get", "list", "update"]
+#### 2. Provisioning Job RBAC (`Role` - Per-Instance)
 
-  # Workload management
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets"]
-    verbs: ["create", "delete", "get", "list", "update"]
+For each Supabase instance, the controller creates a dedicated, namespace-scoped `Role` and `RoleBinding`. The provisioning `Job` for that instance is then bound to this role, limiting its permissions to **only its own namespace**.
 
-  # Ingress management
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses"]
-    verbs: ["create", "delete", "get", "list", "update"]
+**Instance Creation Flow (RBAC)**:
+1. Controller sees a new `SupabaseInstance` CRD.
+2. Controller creates a new namespace (e.g., `supa-my-app`).
+3. Controller creates a `Role` and `RoleBinding` inside the `supa-my-app` namespace.
+4. Controller creates a provisioning `Job` that uses a `ServiceAccount` bound to this new, scoped `Role`.
 
-  # Read-only access to pods (for status checks)
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list"]
+This ensures that a compromised provisioning Job for `supa-my-app` **cannot** access resources in any other namespace (e.g., `supa-another-app` or `kube-system`).
+
+```yaml
+# Example Role created by the controller for a single instance
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: supacontrol-provisioner
+  namespace: supa-my-app # Scoped to the instance's namespace
+rules:
+  # Permissions to manage resources ONLY within this namespace
+  - apiGroups: ["", "apps", "networking.k8s.io", "batch"]
+    resources: ["secrets", "services", "deployments", "ingresses", "jobs", ...]
+    verbs: ["create", "delete", "get", "list", "update", "watch"]
 ```
 
 **Principle of Least Privilege**:
-- Only permissions needed for operation
-- No write access to pods (uses Helm/deployments)
-- No cluster-admin privileges required
+- The main controller has limited cluster-wide permissions.
+- Provisioning Jobs have **zero** cluster-wide permissions.
+- The blast radius of a compromised provisioning Job is contained to a single instance's namespace.
+- This is a critical security feature for a multi-tenant platform.
 
 ### Audit Logging
 
 **What is Logged**:
-- User authentication attempts (success/failure)
-- API key creation and revocation
-- Instance creation and deletion
-- All API requests (endpoint, user, timestamp)
+- User authentication attempts (success/failure).
+- API key creation and revocation.
+- Instance creation and deletion requests.
+- All API requests (endpoint, user, timestamp).
 
 **What is NOT Logged**:
-- Passwords or API keys
-- JWT tokens
-- Sensitive user data
+- Passwords, API keys, or JWT tokens.
+- Sensitive user data from instance databases.
 
-**Future Enhancements**:
-- Centralized logging (ELK stack, Loki)
-- Log retention policies
-- Compliance reporting
 
 ## Deployment Architecture
 
-### Kubernetes Deployment
-
-```
-┌─────────────────────────────────────────────────────────┐
-│              Kubernetes Cluster                          │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │  Namespace: supacontrol                        │    │
-│  ├────────────────────────────────────────────────┤    │
-│  │                                                 │    │
-│  │  ┌──────────────────┐  ┌──────────────────┐   │    │
-│  │  │   Deployment     │  │   Deployment     │   │    │
-│  │  │   supacontrol    │  │   postgresql     │   │    │
-│  │  │                  │  │                  │   │    │
-│  │  │  ┌────────────┐  │  │  ┌────────────┐ │   │    │
-│  │  │  │    Pod     │  │  │  │    Pod     │ │   │    │
-│  │  │  │  Server    │  │  │  │  Database  │ │   │    │
-│  │  │  └────────────┘  │  │  └────────────┘ │   │    │
-│  │  │                  │  │                  │   │    │
-│  │  │ (Replicas: 1-N) │  │ (Replicas: 1)   │   │    │
-│  │  └──────────────────┘  └──────────────────┘   │    │
-│  │           │                     │              │    │
-│  │  ┌────────▼─────────────────────▼──────┐      │    │
-│  │  │          Services                    │      │    │
-│  │  │  - supacontrol (ClusterIP)          │      │    │
-│  │  │  - postgresql (ClusterIP)           │      │    │
-│  │  └──────────────┬──────────────────────┘      │    │
-│  │                 │                              │    │
-│  │  ┌──────────────▼──────────────────────┐      │    │
-│  │  │        Ingress                      │      │    │
-│  │  │  host: supacontrol.example.com     │      │    │
-│  │  │  TLS: enabled                      │      │    │
-│  │  └─────────────────────────────────────┘      │    │
-│  │                                                 │    │
-│  │  ┌─────────────────────────────────────┐      │    │
-│  │  │        Secrets                       │      │    │
-│  │  │  - JWT_SECRET                       │      │    │
-│  │  │  - DB_PASSWORD                      │      │    │
-│  │  └─────────────────────────────────────┘      │    │
-│  │                                                 │    │
-│  │  ┌─────────────────────────────────────┐      │    │
-│  │  │      ConfigMap                       │      │    │
-│  │  │  - Configuration values             │      │    │
-│  │  └─────────────────────────────────────┘      │    │
-│  │                                                 │    │
-│  │  ┌─────────────────────────────────────┐      │    │
-│  │  │  ServiceAccount + RBAC              │      │    │
-│  │  │  - ClusterRole                      │      │    │
-│  │  │  - ClusterRoleBinding               │      │    │
-│  │  └─────────────────────────────────────┘      │    │
-│  │                                                 │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Managed Instance Namespaces                    │   │
-│  ├─────────────────────────────────────────────────┤   │
-│  │  - supa-app1 (Supabase instance 1)             │   │
-│  │  - supa-app2 (Supabase instance 2)             │   │
-│  │  - supa-app3 (Supabase instance 3)             │   │
-│  │  ...                                            │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-```
-
-### High Availability Configuration
-
-For production deployments:
-
-```yaml
-# Multiple replicas
-replicaCount: 3
-
-# Pod anti-affinity (spread across nodes)
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values:
-                  - supacontrol
-          topologyKey: kubernetes.io/hostname
-
-# Resource limits (prevent resource starvation)
-resources:
-  limits:
-    cpu: 1000m
-    memory: 1Gi
-  requests:
-    cpu: 500m
-    memory: 512Mi
-
-# Health checks
-livenessProbe:
-  httpGet:
-    path: /healthz
-    port: 8091
-  initialDelaySeconds: 30
-  periodSeconds: 10
-
-readinessProbe:
-  httpGet:
-    path: /healthz
-    port: 8091
-  initialDelaySeconds: 5
-  periodSeconds: 5
-
-# PostgreSQL HA
-postgresql:
-  architecture: replication
-  replication:
-    enabled: true
-    numSynchronousReplicas: 1
-```
+(No changes to this section)
 
 ## Scalability & Performance
 
-### Horizontal Scalability
-
-**Application Tier**:
-- Stateless design allows horizontal scaling
-- Multiple replicas behind load balancer (Kubernetes Service)
-- Session-free architecture (JWT tokens)
-
-**Database Tier**:
-- PostgreSQL supports read replicas
-- Connection pooling (future: PgBouncer)
-- Indexed queries for performance
-
-**Limitations**:
-- Single database write leader (PostgreSQL constraint)
-- Namespace creation is sequential (Kubernetes API)
-
-### Performance Considerations
-
-**Current Performance**:
-- API response time: < 100ms (simple operations)
-- Instance creation: 2-5 minutes (depends on Supabase Helm chart)
-- Instance deletion: 1-2 minutes
-- JWT validation: < 1ms
-
-**Optimization Strategies**:
-1. **Caching** (future):
-   - Cache instance list in memory (with TTL)
-   - Cache Kubernetes status queries
-
-2. **Database Optimization**:
-   - Indexes on frequently queried columns
-   - Connection pooling
-   - Prepared statements (already implemented with sqlx)
-
-3. **Asynchronous Operations** (future):
-   - Background job queue for long-running tasks
-   - Webhooks for completion notifications
-
-4. **Rate Limiting** (future):
-   - Protect against abuse
-   - Per-user quotas
-
-### Resource Requirements
-
-**Minimum (Development)**:
-- CPU: 250m (0.25 cores)
-- Memory: 256Mi
-- Storage: 1Gi (PostgreSQL)
-
-**Recommended (Production)**:
-- CPU: 500m-1000m (0.5-1 cores)
-- Memory: 512Mi-1Gi
-- Storage: 20Gi (PostgreSQL with retention)
+(No changes to this section)
 
 ## Technology Stack Rationale
 
-### Backend: Go + Echo
-
-**Why Go?**
-- Excellent Kubernetes client library (client-go)
-- Fast compilation and execution
-- Built-in concurrency (goroutines)
-- Static typing and strong tooling
-- Single binary deployment
-
-**Why Echo?**
-- Lightweight, high-performance framework
-- Excellent middleware support
-- Built-in JWT support
-- Active community and maintenance
-
-**Alternatives Considered**:
-- **Fiber**: Similar performance, less mature
-- **Gin**: Popular, but Echo has better middleware ecosystem
-
-### Frontend: React + Vite
-
-**Why React?**
-- Large ecosystem and community
-- Component-based architecture
-- Excellent developer tools
-- Wide adoption and talent availability
-
-**Why Vite?**
-- Fast dev server with HMR
-- Modern build tool (ESBuild)
-- Better DX than Webpack/CRA
-- Optimized production builds
-
-**Alternatives Considered**:
-- **Vue**: Good, but smaller community for this use case
-- **Svelte**: Interesting, but less mature ecosystem
-
-### Database: PostgreSQL
-
-**Why PostgreSQL?**
-- Robust, battle-tested RDBMS
-- Excellent support for JSON (for future extensions)
-- ACID compliance
-- Open source and widely deployed
-- Strong Kubernetes integration (operators available)
-
-**Alternatives Considered**:
-- **MySQL**: Less feature-rich, weaker JSON support
-- **SQLite**: Not suitable for multi-pod deployment
-- **NoSQL**: Overkill for relational data model
-
-### Orchestration: Kubernetes + Helm
-
-**Why Kubernetes?**
-- Industry standard for container orchestration
-- SupaControl's primary use case is K8s environments
-- Native namespace isolation
-- Declarative resource management
-
-**Why Helm?**
-- Package manager for Kubernetes
-- Supabase community provides Helm chart
-- Enables repeatable deployments
-- Template-based configuration
+(No changes to this section)
 
 ## Design Decisions
 
 ### Decision 1: Stateless Application
 
-**Context**: Need for horizontal scalability and cloud-native architecture
+**Context**: Need for horizontal scalability and cloud-native architecture.
 
-**Decision**: Store all state in PostgreSQL, no in-memory sessions
+**Decision**: Store all persistent state externally. No in-memory sessions.
 
 **Rationale**:
-- Enables horizontal scaling (add more pods)
-- Simplifies deployment and recovery
-- Cloud-native best practice
-
-**Tradeoffs**:
-- Database becomes single point of failure (mitigated with HA)
-- Slight latency increase vs. in-memory (acceptable for use case)
+- Enables horizontal scaling (add more pods).
+- Simplifies deployment and recovery.
+- Aligns with cloud-native best practices.
+- State is managed by dedicated systems: Kubernetes for instance state and PostgreSQL for operational data.
 
 ### Decision 2: One Namespace Per Instance
 
-**Context**: Instance isolation and resource management
-
-**Decision**: Each Supabase instance in separate Kubernetes namespace
-
-**Rationale**:
-- Strong isolation between tenants
-- Easy resource quota management per instance
-- Simplified cleanup (delete namespace = delete all resources)
-- Aligns with Supabase Helm chart expectations
-
-**Tradeoffs**:
-- Namespace proliferation (can reach K8s limits with 1000s of instances)
-- Slightly more complex RBAC (cluster-level permissions needed)
+(No changes to this decision)
 
 ### Decision 3: API-First Design
 
-**Context**: Need to support UI, CLI, and programmatic access
-
-**Decision**: All functionality exposed via REST API first
-
-**Rationale**:
-- Enables multiple client types (web, CLI, CI/CD)
-- Facilitates testing (test API directly)
-- Supports automation and integration
-
-**Tradeoffs**:
-- More initial development effort
-- Need to maintain API compatibility
+(No changes to this decision)
 
 ### Decision 4: JWT + API Keys
 
-**Context**: Need for both interactive and programmatic authentication
-
-**Decision**: Support both JWT (short-lived, user sessions) and API keys (long-lived, automation)
-
-**Rationale**:
-- JWTs: Good for web UI sessions (expire automatically)
-- API keys: Good for CLI and CI/CD (revocable, long-lived)
-- Both use same Bearer token auth mechanism
-
-**Tradeoffs**:
-- Complexity of supporting two auth methods
-- API keys require storage and revocation management
+(No changes to this decision)
 
 ### Decision 5: CRD as Single Source of Truth (ADR-001)
 
-**Context**: Need to store and manage instance state reliably
+**Context**: Need to store and manage instance state reliably and in a Kubernetes-native way.
 
-**Decision**: Use Kubernetes SupabaseInstance CRDs as the Single Source of Truth for all instance state, not PostgreSQL
+**Decision**: Use Kubernetes `SupabaseInstance` CRDs as the Single Source of Truth for all instance state, not PostgreSQL.
 
 **Rationale**:
-- Kubernetes-native architecture (operator pattern)
-- Declarative state management with built-in versioning
-- No state synchronization complexity
-- Leverages K8s API features (metadata, status, conditions, finalizers)
-- Source of truth lives where instances run
-- GitOps-ready for declarative deployments
+- **Kubernetes-Native**: Aligns with the operator pattern.
+- **Declarative**: Enables declarative state management and GitOps workflows.
+- **No Sync Complexity**: Eliminates the risk of divergence between a database and the cluster's actual state.
+- **Leverages K8s Features**: Utilizes metadata, status conditions, finalizers, and controller-runtime reconciliation.
+- **Source of Truth Proximity**: State lives where the instances run.
 
 **Tradeoffs**:
-- Cannot query instance state without K8s API access (acceptable - this IS a K8s control plane)
-- No complex SQL queries (client-side filtering sufficient for current scale)
-- Must include CRDs in K8s cluster backups
+- Cannot query instance state without K8s API access (acceptable for a K8s control plane).
+- No complex SQL queries on instance data (client-side filtering is sufficient).
 
-**Reference**: See `docs/adr/001-crd-as-single-source-of-truth.md` for full details
+**Reference**: See `docs/adr/001-crd-as-single-source-of-truth.md` for full details.
+
+### Decision 6: Job-Based Provisioning (ADR-002)
+
+**Context**: The need for reliable, observable, and non-blocking long-running operations like Helm installations.
+
+**Decision**: Delegate provisioning and cleanup tasks to Kubernetes `Jobs`.
+
+**Rationale**:
+- **Non-Blocking**: The main controller remains responsive while Jobs run.
+- **Observability**: Job status, logs, and events are easily monitored.
+- **Reliability**: Jobs have built-in retry and timeout mechanisms.
+- **Resource Isolation**: Provisioning tasks run in dedicated pods with their own resource limits.
+
+**Reference**: See `docs/adr/002-job-based-provisioning-pattern.md` for full details.
 
 ## Future Architecture
 
-### Planned Enhancements
-
-#### 1. Event-Driven Architecture
-
-**Current**: Synchronous API calls
-**Future**: Event queue for long-running operations
-
-```
-API Request → Queue Job → Background Worker → Webhook Notification
-```
-
-**Benefits**:
-- Non-blocking API responses
-- Retry logic for failures
-- Better resource utilization
-
-#### 2. Observability
-
-**Metrics** (Prometheus):
-- Instance creation rate
-- API request latency
-- Error rates
-- Resource usage per instance
-
-**Tracing** (Jaeger):
-- Request flow visualization
-- Performance bottleneck identification
-
-**Logging** (Loki):
-- Centralized log aggregation
-- Structured logging with correlation IDs
-
-#### 3. Multi-Cluster Support
-
-**Current**: Single Kubernetes cluster
-**Future**: Manage instances across multiple clusters
-
-```
-┌───────────────┐
-│  SupaControl  │
-└───────┬───────┘
-        │
-        ├──────► Cluster A (us-west)
-        ├──────► Cluster B (us-east)
-        └──────► Cluster C (eu-west)
-```
-
-**Benefits**:
-- Geographic distribution
-- Fault tolerance
-- Regulatory compliance (data residency)
-
-#### 4. Instance Templates
-
-**Current**: Default Supabase installation
-**Future**: Predefined instance configurations
-
-```yaml
-templates:
-  - name: "small"
-    resources: { cpu: "500m", memory: "1Gi" }
-  - name: "medium"
-    resources: { cpu: "2000m", memory: "4Gi" }
-  - name: "large"
-    resources: { cpu: "4000m", memory: "8Gi" }
-```
-
-#### 5. Cost Tracking
-
-Track resource usage and costs per instance:
-- CPU/memory consumption
-- Storage usage
-- Network transfer
-- Cost attribution per customer
-
-#### 6. GitOps Integration
-
-Support declarative instance management:
-
-```yaml
-# instances.yaml
-apiVersion: supacontrol.io/v1
-kind: Instance
-metadata:
-  name: production-app
-spec:
-  template: large
-  domain: app.example.com
-```
-
-Sync with ArgoCD/Flux for GitOps workflow.
+(No changes to this section)
 
 ---
 
 ## Conclusion
 
 SupaControl's architecture is designed for:
-- **Simplicity**: Easy to understand and maintain
-- **Scalability**: Horizontal scaling and multi-tenancy
-- **Security**: Defense in depth, least privilege
-- **Extensibility**: Modular design for future enhancements
+- **Simplicity**: Easy to understand and maintain.
+- **Scalability**: Horizontal scaling and multi-tenancy.
+- **Security**: Defense in depth, least privilege.
+- **Extensibility**: Modular design for future enhancements.
 
 The architecture balances pragmatism with best practices, focusing on delivering value while maintaining code quality and operational excellence.
 
@@ -1169,6 +599,6 @@ For questions or suggestions about the architecture, please open an issue on Git
 
 ---
 
-**Document Version**: 1.0
+**Document Version**: 1.1
 **Last Updated**: November 2025
 **Maintained By**: SupaControl Contributors

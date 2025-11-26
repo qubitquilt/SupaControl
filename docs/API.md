@@ -238,7 +238,7 @@ curl -X DELETE https://supacontrol.example.com/api/v1/auth/api-keys/1 \
 
 ### Instances
 
-Manage Supabase instances.
+Manage Supabase instances. All instance operations are asynchronous. The API will accept the request and the operation will be carried out by the controller in the background.
 
 #### List Instances
 
@@ -253,20 +253,22 @@ Authorization: Bearer <token>
 ```json
 [
   {
-    "id": 1,
-    "name": "my-app",
+    "projectName": "my-app",
     "namespace": "supa-my-app",
     "status": "Running",
-    "created_at": "2025-01-15T10:00:00Z",
-    "updated_at": "2025-01-15T10:05:00Z"
+    "createdAt": "2025-01-15T10:00:00Z",
+    "updatedAt": "2025-01-15T10:05:00Z",
+    "studioUrl": "https://studio.my-app.supabase.example.com",
+    "apiUrl": "https://api.my-app.supabase.example.com"
   },
   {
-    "id": 2,
-    "name": "staging-app",
+    "projectName": "staging-app",
     "namespace": "supa-staging-app",
-    "status": "Pending",
-    "created_at": "2025-01-15T11:00:00Z",
-    "updated_at": "2025-01-15T11:00:00Z"
+    "status": "Provisioning",
+    "createdAt": "2025-01-15T11:00:00Z",
+    "updatedAt": "2025-01-15T11:00:00Z",
+    "studioUrl": null,
+    "apiUrl": null
   }
 ]
 ```
@@ -283,7 +285,7 @@ curl -X GET https://supacontrol.example.com/api/v1/instances \
 
 #### Create Instance
 
-Deploy a new Supabase instance.
+Request the deployment of a new Supabase instance.
 
 ```http
 POST /api/v1/instances
@@ -299,32 +301,37 @@ Content-Type: application/json
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | string | Yes | Instance name (lowercase, alphanumeric, hyphens only, max 63 chars) |
+| `name` | string | Yes | Instance name (must be a valid Kubernetes resource name) |
 
 **Response:**
 ```json
 {
-  "id": 1,
-  "name": "my-app",
-  "namespace": "supa-my-app",
-  "status": "Pending",
-  "created_at": "2025-01-15T10:00:00Z"
+  "message": "Instance creation request accepted",
+  "instance": {
+    "projectName": "my-app",
+    "namespace": "supa-my-app",
+    "status": "Pending",
+    "createdAt": "2025-01-15T10:00:00Z",
+    "updatedAt": "2025-01-15T10:00:00Z",
+    "studioUrl": null,
+    "apiUrl": null
+  }
 }
 ```
 
 **Status Codes:**
-- `201 Created` - Instance creation initiated
-- `400 Bad Request` - Invalid instance name
-- `401 Unauthorized` - Invalid or missing token
-- `409 Conflict` - Instance with this name already exists
-- `500 Internal Server Error` - Kubernetes/Helm error
+- `202 Accepted` - Instance creation request accepted.
+- `400 Bad Request` - Invalid instance name.
+- `401 Unauthorized` - Invalid or missing token.
+- `409 Conflict` - Instance with this name already exists.
+- `500 Internal Server Error` - Failed to create instance CRD.
 
 **Validation Rules:**
-- Name must be lowercase
-- Only alphanumeric characters and hyphens allowed
-- Cannot start or end with a hyphen
-- Maximum 63 characters (Kubernetes limit)
-- Must be unique
+- Name must be lowercase.
+- Only alphanumeric characters and hyphens allowed.
+- Cannot start or end with a hyphen.
+- Maximum 63 characters (Kubernetes limit).
+- Must be unique.
 
 **Example:**
 ```bash
@@ -336,19 +343,16 @@ curl -X POST https://supacontrol.example.com/api/v1/instances \
   }'
 ```
 
-**What Happens:**
-1. API validates the instance name
-2. Creates Kubernetes namespace `supa-my-app`
-3. Installs Supabase Helm chart in the namespace
-4. Configures ingress with domain `my-app.supabase.yourdomain.com`
-5. Saves instance record to database
-6. Returns instance details
-
-**Note:** Instance creation is asynchronous. Status will be `Pending` initially, then change to `Running` once all pods are ready (typically 2-5 minutes).
+**What Happens (Asynchronous Process):**
+1. The API validates the request and creates a `SupabaseInstance` Custom Resource (CR) in Kubernetes with an empty phase.
+2. The API returns a `202 Accepted` response immediately. The instance status will be `Pending`.
+3. The SupaControl controller detects the new CR and updates its phase to `Pending`.
+4. The controller then initiates a provisioning `Job` to create the namespace, secrets, and install the Supabase Helm chart, changing the phase to `Provisioning`.
+5. You can poll the `GET /api/v1/instances/:name` endpoint to check the status. The status will change to `Provisioning` and then `Running` once the provisioning Job is complete.
 
 #### Get Instance
 
-Get details about a specific instance.
+Get details and status of a specific instance.
 
 ```http
 GET /api/v1/instances/:name
@@ -358,20 +362,24 @@ Authorization: Bearer <token>
 **Response:**
 ```json
 {
-  "id": 1,
-  "name": "my-app",
+  "projectName": "my-app",
   "namespace": "supa-my-app",
   "status": "Running",
-  "created_at": "2025-01-15T10:00:00Z",
-  "updated_at": "2025-01-15T10:05:00Z"
+  "createdAt": "2025-01-15T10:00:00Z",
+  "updatedAt": "2025-01-15T10:05:00Z",
+  "studioUrl": "https://studio.my-app.supabase.example.com",
+  "apiUrl": "https://api.my-app.supabase.example.com"
 }
 ```
 
 **Status Values:**
-- `Pending` - Instance is being created
-- `Running` - Instance is operational
-- `Failed` - Instance deployment failed
-- `Deleting` - Instance is being deleted
+- `Pending` - The instance creation request has been accepted and is waiting to be provisioned.
+- `Provisioning` - A provisioning job has been created for the instance.
+- `ProvisioningInProgress` - The instance is actively being provisioned.
+- `Running` - The instance is operational.
+- `Deleting` - A cleanup job has been created for the instance.
+- `DeletingInProgress` - The instance is actively being deleted.
+- `Failed` - The instance deployment failed. Check the `errorMessage` field for details.
 
 **Status Codes:**
 - `200 OK` - Success
@@ -386,7 +394,7 @@ curl -X GET https://supacontrol.example.com/api/v1/instances/my-app \
 
 #### Delete Instance
 
-Delete a Supabase instance and all its resources.
+Request the deletion of a Supabase instance and all its resources.
 
 ```http
 DELETE /api/v1/instances/:name
@@ -396,20 +404,22 @@ Authorization: Bearer <token>
 **Response:**
 ```json
 {
-  "message": "Instance deleted successfully"
+  "message": "Instance deletion started"
 }
 ```
 
 **Status Codes:**
-- `200 OK` - Instance deletion initiated
-- `401 Unauthorized` - Invalid or missing token
-- `404 Not Found` - Instance not found
-- `500 Internal Server Error` - Deletion failed
+- `202 Accepted` - Instance deletion request accepted.
+- `401 Unauthorized` - Invalid or missing token.
+- `404 Not Found` - Instance not found.
+- `500 Internal Server Error` - Failed to initiate deletion.
 
-**What Happens:**
-1. Uninstalls Helm release from namespace
-2. Deletes Kubernetes namespace and all resources
-3. Soft deletes instance record from database (sets `deleted_at`)
+**What Happens (Asynchronous Process):**
+1. The API marks the `SupabaseInstance` CR for deletion.
+2. The SupaControl controller's finalizer logic detects the deletion timestamp.
+3. The controller initiates a cleanup `Job` to uninstall the Helm release and delete the namespace and all associated resources.
+4. The API returns a `202 Accepted` response immediately. The instance status will change to `Deleting`.
+5. Once the cleanup Job is complete, the controller removes the finalizer, and the CR is garbage collected by Kubernetes.
 
 **Warning:** This operation is destructive and cannot be undone. All data in the instance will be permanently lost.
 
@@ -445,10 +455,25 @@ All errors follow a consistent format:
 
 ### Error Examples
 
-**Missing Authentication:**
+**Authentication Errors:**
 ```json
 {
-  "message": "missing or malformed jwt"
+  "message": "missing authorization header"
+}
+```
+```json
+{
+  "message": "invalid authorization header format"
+}
+```
+```json
+{
+  "message": "invalid API key"
+}
+```
+```json
+{
+  "message": "invalid JWT token"
 }
 ```
 
@@ -519,10 +544,23 @@ The API is versioned via the URL path: `/api/v1/`
 
 ## SDKs and Client Libraries
 
-**Official CLI:**
-- [supactl](https://github.com/qubitquilt/supactl) - Go-based CLI tool
+This project provides two command-line tools: an interactive installer for deploying the SupaControl server and the `supactl` CLI for managing Supabase instances.
 
-**Community Libraries:**
+### Official CLI (`supactl`)
+
+The primary tool for interacting with the SupaControl API is `supactl`, a feature-rich, Go-based command-line interface. It is distributed as a single binary and is available in a separate repository.
+
+- **Repository**: [https://github.com/qubitquilt/supactl](https://github.com/qubitquilt/supactl)
+- **Key Commands**: `login`, `create`, `list`, `status`, `delete`
+
+Use `supactl` for all programmatic and command-line management of your Supabase instances.
+
+### Interactive Installer
+
+The `cli` directory in this repository contains an interactive installer to help you deploy the SupaControl server to your Kubernetes cluster. It is a Node.js-based tool that guides you through the initial setup and configuration. It is not used for managing Supabase instances after installation.
+
+### Community Libraries
+
 - Coming soon!
 
 Want to create a client library? We'd love to feature it here. Open an issue to let us know!

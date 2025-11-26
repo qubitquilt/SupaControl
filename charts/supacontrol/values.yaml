@@ -83,7 +83,7 @@ config:
     ingressDomain: "supabase.example.com"
 
   supabase:
-    chartRepo: "https://supabase-community.github.io/supabase-kubernetes"
+    chartRepo: "https://supabase.github.io/helm-charts"
     chartName: "supabase"
     chartVersion: ""
 

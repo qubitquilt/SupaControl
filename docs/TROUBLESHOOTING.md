@@ -78,43 +78,50 @@ psql -h $DB_HOST -U $DB_USER -d $DB_NAME
 
 ### 3. Instance Creation Fails
 
-**Symptom:** Instance stuck in "Pending" or creation errors
+**Symptom:** Instance stuck in "Provisioning" or "Failed" phase.
 
 **Diagnosis:**
 ```bash
-# Check SupaControl logs
-kubectl logs -n supacontrol -l app.kubernetes.io/name=supacontrol -f
+# 1. Check the SupabaseInstance CR status
+kubectl get supabaseinstance <instance-name> -o yaml
 
-# Check if namespace was created
+# 2. Check the logs of the SupaControl controller
+kubectl logs -n supacontrol-system -l app.kubernetes.io/name=supacontrol -f
+
+# 3. Check if the instance namespace was created
 kubectl get namespace supa-<instance-name>
 
-# Check Helm release status
-helm list -n supa-<instance-name>
+# 4. Check the status of the provisioning Job
+kubectl get job -n supa-<instance-name> -l supacontrol.qubitquilt.com/job-type=provision
 
-# Check pod status in instance namespace
-kubectl get pods -n supa-<instance-name>
+# 5. Describe the Job to see events and potential errors
+kubectl describe job -n supa-<instance-name> <job-name>
+
+# 6. Check the logs of the provisioning Job's pod
+kubectl logs -n supa-<instance-name> -l job-name=<job-name>
 ```
 
 **Common Causes:**
-- Insufficient cluster resources
-- Helm chart repository unreachable
-- RBAC permission issues
-- Ingress misconfiguration
+- Insufficient cluster resources (CPU, memory, or storage).
+- Helm chart repository is unreachable from the cluster.
+- Incorrect Helm chart version specified.
+- Network policies blocking the provisioning job.
+- RBAC permission issues for the provisioner ServiceAccount within the namespace.
 
 **Solutions:**
 ```bash
-# Manually check Helm repository
-helm repo list
-helm repo update
+# Check resource availability in the cluster
+kubectl top nodes
 
-# Test Helm chart download
+# Verify Helm chart accessibility from a pod inside the cluster
+kubectl run -it --rm --restart=Never --image=alpine/helm:latest helm-test -- /bin/sh
+# Inside pod:
+helm repo add supabase https://supabase.github.io/helm-charts
+helm repo update
 helm pull supabase/supabase --version <version>
 
-# Check RBAC permissions
-kubectl auth can-i create namespaces --as=system:serviceaccount:supacontrol:supacontrol
-
-# View detailed error from logs
-kubectl logs -n supacontrol -l app.kubernetes.io/name=supacontrol --tail=100
+# Review the RBAC roles for the provisioner in the instance namespace
+kubectl get role,rolebinding -n supa-<instance-name>
 ```
 
 ### 4. Dashboard Not Accessible
@@ -248,7 +255,7 @@ If you're still stuck:
 **Related Documentation:**
 - [Installation Guide](../README.md#installation)
 - [Configuration Guide](../README.md#configuration)
-- [Security Guide](SECURITY.md)
-- [Development Guide](DEVELOPMENT.md)
+- [Security Guide](./SECURITY.md)
+- [Development Guide](./DEVELOPMENT.md)
 
 **Last Updated: November 2025**

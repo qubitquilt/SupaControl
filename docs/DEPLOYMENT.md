@@ -184,86 +184,69 @@ kubectl get pdb -n supacontrol
 
 ## Kubernetes RBAC
 
-SupaControl requires cluster-wide permissions to manage namespaces and deploy instances.
+SupaControl follows the principle of least privilege by using a two-tiered RBAC model. This approach avoids granting broad, cluster-wide permissions to the main controller and provisioning jobs, significantly reducing the security risk.
 
-### Required Permissions
+### 1. Controller RBAC (`ClusterRole`)
 
-The Helm chart creates a `ClusterRole` with these permissions:
+The main SupaControl controller runs with a `ClusterRole` that grants it only the permissions needed to manage `SupabaseInstance` CRDs, create namespaces, and manage RBAC resources within those namespaces.
 
 ```yaml
+# Simplified main controller ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: supacontrol
+  name: supacontrol-controller-manager
 rules:
-  # Namespace management
+  - apiGroups: ["supacontrol.qubitquilt.com"]
+    resources: ["supabaseinstances", "supabaseinstances/finalizers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["create", "delete", "get", "list", "watch"]
+    verbs: ["create", "get", "list", "watch"] # Note: delete is handled by finalizer logic
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+```
 
-  # Resource management within namespaces
-  - apiGroups: [""]
-    resources: ["secrets", "configmaps", "services", "persistentvolumeclaims"]
+### 2. Provisioning Job RBAC (`Role` - Per-Instance)
+
+For each Supabase instance, the controller creates a dedicated, namespace-scoped `Role` and `RoleBinding`. The provisioning `Job` for that instance is then bound to this role, limiting its permissions to **only its own namespace**.
+
+This ensures that a compromised provisioning Job for one instance **cannot** access resources in any other namespace.
+
+```yaml
+# Example Role created by the controller for a single instance
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: supacontrol-provisioner
+  namespace: supa-my-app # Scoped to the instance's namespace
+rules:
+  # Permissions to manage resources ONLY within this namespace
+  - apiGroups: ["", "apps", "networking.k8s.io", "batch"]
+    resources: ["secrets", "services", "deployments", "ingresses", "jobs", ...]
     verbs: ["create", "delete", "get", "list", "update", "watch"]
-
-  # Workload management
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets"]
-    verbs: ["create", "delete", "get", "list", "update", "watch"]
-
-  # Ingress management
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses"]
-    verbs: ["create", "delete", "get", "list", "update", "watch"]
-
-  # Pod inspection (for status checks)
-  - apiGroups: [""]
-    resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "watch"]
-
-  # Events (for debugging)
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["get", "list", "watch"]
 ```
 
 ### Security Best Practices
 
 **Principle of Least Privilege:**
-- ✅ No write access to pods (uses Deployments/StatefulSets)
-- ✅ No cluster-admin privileges required
-- ✅ No access to other namespaces' secrets
-- ✅ Read-only access to pods (for status only)
+- The main controller has limited cluster-wide permissions.
+- Provisioning Jobs have **zero** cluster-wide permissions.
+- The blast radius of a compromised provisioning Job is contained to a single instance's namespace.
 
 **Audit RBAC:**
 
 ```bash
-# View current ClusterRole
-kubectl describe clusterrole supacontrol
+# View the main controller's ClusterRole
+kubectl describe clusterrole supacontrol-controller-manager
 
-# Check what SupaControl ServiceAccount can do
-kubectl auth can-i --list \
-  --as=system:serviceaccount:supacontrol:supacontrol
-
-# Test specific permission
-kubectl auth can-i create namespaces \
-  --as=system:serviceaccount:supacontrol:supacontrol
-```
-
-### Restricting Permissions (Optional)
-
-For extra security, you can restrict SupaControl to specific namespaces:
-
-**Note:** This prevents SupaControl from creating instances. Only use if you pre-create namespaces.
-
-```yaml
-# Use Role instead of ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: supacontrol
-  namespace: supa-*  # Only works in supa-* namespaces
-# ... same rules as ClusterRole
+# To check the permissions of a provisioning job, first find the Role and RoleBinding in the instance's namespace
+kubectl get role -n <instance-namespace>
+kubectl get rolebinding -n <instance-namespace>
 ```
 
 ## Monitoring with Prometheus
@@ -438,10 +421,8 @@ pg_restore -h supacontrol-postgresql \
 # Check pods are running
 kubectl get pods -n supacontrol
 
-# Check instances in database
-kubectl exec -it deployment/supacontrol -n supacontrol -- \
-  psql -h supacontrol-postgresql -U supacontrol -d supacontrol \
-  -c "SELECT name, status FROM instances;"
+# Check for SupabaseInstance CRs
+kubectl get supabaseinstances --all-namespaces
 
 # Test API
 curl https://supacontrol.example.com/healthz

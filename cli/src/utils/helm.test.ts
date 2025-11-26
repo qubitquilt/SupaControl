@@ -196,11 +196,7 @@ describe('helm utilities', () => {
     it('should call helm install with correct arguments', async () => {
       // Mock checkHelmRelease to return false (release doesn't exist)
       vi.mocked(execa)
-        .mockResolvedValueOnce({
-          stdout: '',
-          stderr: 'Error: release: not found',
-          exitCode: 1,
-        } as any) // checkHelmRelease call
+        .mockRejectedValueOnce(new Error('Error: release: not found')) // checkHelmRelease call
         .mockResolvedValueOnce({
           stdout: 'v3.12.0',
           stderr: '',

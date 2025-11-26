@@ -61,6 +61,7 @@ type ListAPIKeysResponse struct {
 type InstanceStatus string
 
 const (
+	StatusPending      InstanceStatus = "pending"
 	StatusProvisioning InstanceStatus = "provisioning"
 	StatusRunning      InstanceStatus = "running"
 	StatusDeleting     InstanceStatus = "deleting"
